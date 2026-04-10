@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Nexova Solutions: consultora de talento con soluciones de selección, formación y soporte escalable impulsadas por IA."
+    />
+    <title>Nexova Solutions | Talento, Formación y Soporte con IA</title>
+
+    <!-- Tailwind CSS v4 (browser build) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+    <style type="text/tailwindcss">
+       @theme {
+        --color-brand: #0f766e;
+        --color-brand-dark: #115e59;
+        --color-accent: #f59e0b;
+        --color-surface: #f8fafc;
+        --font-display: "Outfit", "Segoe UI", sans-serif;
+      }
+
+      @layer utilities {
+        .bg-grid {
+          background-image:
+            linear-gradient(to right, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
+          background-size: 32px 32px;
+        }
+      }
+    </style>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "LocalBusiness",
+        "name": "Nexova Solutions",
+        "url": "https://www.nexovasolutions.com",
+        "logo": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?q=80&w=200&auto=format&fit=crop",
+        "description": "Consultora de recursos humanos, formación corporativa y soporte externalizado impulsado por IA.",
+        "telephone": "+34 960 000 120",
+        "email": "contacto@nexovasolutions.com",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "Avenida de la Innovación 45",
+          "addressLocality": "Valencia",
+          "postalCode": "46002",
+          "addressCountry": "ES"
+        },
+        "sameAs": [
+          "https://www.linkedin.com/company/nexova-solutions"
+        ],
+        "areaServed": ["España", "Estados Unidos"],
+        "openingHours": "Mo-Fr 09:00-18:00"
+      }
+    </script>
+  </head>
+  <body class="bg-surface text-slate-900 antialiased">
+    <header class="sticky top-0 z-50 border-b border-slate-200/70 bg-white/90 backdrop-blur" aria-label="Cabecera principal">
+      <div class="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        <a href="#inicio" class="flex items-center gap-3" aria-label="Ir al inicio de Nexova Solutions">
+          <img
+            src="https://images.unsplash.com/photo-1560179707-f14e90ef3623?q=80&w=120&auto=format&fit=crop"
+            alt="Logotipo de Nexova Solutions"
+            class="h-10 w-10 rounded-full object-cover"
+          />
+          <span class="font-[Outfit] text-lg font-extrabold tracking-tight text-brand">Nexova Solutions</span>
+        </a>
+
+        <nav aria-label="Navegación principal" class="hidden items-center gap-6 md:flex">
+          <a href="#servicios" class="text-sm font-semibold text-slate-700 transition hover:text-brand">Servicios</a>
+          <a href="#impacto" class="text-sm font-semibold text-slate-700 transition hover:text-brand">Impacto</a>
+          <a href="#contacto" class="text-sm font-semibold text-slate-700 transition hover:text-brand">Contacto</a>
+          <a
+            href="application.html"
+            class="rounded-full bg-brand px-5 py-2 text-sm font-bold text-white transition hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            aria-label="Ir al formulario de aplicación"
+          >
+            Aplicar ahora
+          </a>
+        </nav>
+
+        <a
+          href="application.html"
+          class="rounded-full bg-brand px-4 py-2 text-sm font-bold text-white md:hidden"
+          aria-label="Ir al formulario de aplicación"
+        >
+          Aplicar
+        </a>
+      </div>
+    </header>
+
+    <main id="inicio" class="font-[Outfit]" aria-label="Contenido principal">
+      <section class="relative overflow-hidden bg-white" aria-labelledby="hero-title">
+        <div class="absolute inset-0 bg-grid" aria-hidden="true"></div>
+        <div class="relative mx-auto grid w-full max-w-7xl items-center gap-10 px-4 py-16 sm:px-6 md:py-20 lg:grid-cols-2 lg:gap-16 lg:px-8">
+          <div>
+            <p class="mb-4 inline-flex rounded-full bg-brand/10 px-4 py-1 text-sm font-semibold text-brand" aria-label="Sello de propuesta de valor">
+              AI Engineering para talento B2B
+            </p>
+            <h1 id="hero-title" class="text-4xl font-extrabold leading-tight text-slate-900 sm:text-5xl">
+              Escalamos la gestión de talento con datos, automatización e inteligencia artificial.
+            </h1>
+            <p class="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
+              En Nexova Solutions unimos selección, formación y soporte para que tus equipos crezcan más rápido, con menos fricción y mejor rendimiento operativo.
+            </p>
+            <div class="mt-8 flex flex-wrap items-center gap-3">
+              <a
+                href="application.html"
+                class="rounded-full bg-brand px-6 py-3 text-sm font-bold text-white shadow-lg shadow-brand/20 transition hover:-translate-y-0.5 hover:bg-brand-dark"
+                aria-label="Ir al formulario de aplicación"
+              >
+                Quiero aplicar
+              </a>
+              <a
+                href="#servicios"
+                class="rounded-full border border-slate-300 px-6 py-3 text-sm font-bold text-slate-800 transition hover:border-brand hover:text-brand"
+                aria-label="Ver nuestros servicios"
+              >
+                Ver servicios
+              </a>
+            </div>
+          </div>
+
+          <figure class="rounded-3xl bg-white p-3 shadow-2xl shadow-slate-200" aria-label="Imagen principal de equipo colaborando">
+            <img
+              src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1200&auto=format&fit=crop"
+              alt="Equipo profesional colaborando frente a un panel de métricas"
+              class="h-[280px] w-full rounded-2xl object-cover sm:h-[360px]"
+            />
+            <figcaption class="px-2 py-3 text-sm text-slate-600">
+              Operaciones de talento conectadas en tiempo real.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="servicios" class="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 lg:px-8" aria-labelledby="servicios-title">
+        <h2 id="servicios-title" class="text-2xl font-extrabold sm:text-3xl">Lo que hacemos</h2>
+        <p class="mt-3 max-w-3xl text-slate-600">
+          Soluciones modulares para selección, ventas, formación y soporte empresarial.
+        </p>
+
+        <div class="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4" role="list" aria-label="Lista de servicios">
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" role="listitem" aria-label="Servicio de selección asistida">
+            <h3 class="text-lg font-bold text-brand">Selección Asistida</h3>
+            <p class="mt-2 text-sm text-slate-600">Scoring de CVs, ranking explicable y seguimiento automático de candidatos.</p>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" role="listitem" aria-label="Servicio de ventas inteligentes">
+            <h3 class="text-lg font-bold text-brand">Ventas Inteligentes</h3>
+            <p class="mt-2 text-sm text-slate-600">Automatización de secuencias y alertas de oportunidades sin actividad.</p>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" role="listitem" aria-label="Servicio de formación corporativa">
+            <h3 class="text-lg font-bold text-brand">Formación Corporativa</h3>
+            <p class="mt-2 text-sm text-slate-600">Catálogo online, recomendaciones por perfil y trazabilidad del aprendizaje.</p>
+          </article>
+
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" role="listitem" aria-label="Servicio de soporte al cliente">
+            <h3 class="text-lg font-bold text-brand">Soporte Externalizado</h3>
+            <p class="mt-2 text-sm text-slate-600">Chatbot de primera línea, base de conocimiento y panel de SLA en vivo.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="impacto" class="bg-slate-900 py-14 text-white" aria-labelledby="impacto-title">
+        <div class="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+          <h2 id="impacto-title" class="text-2xl font-extrabold sm:text-3xl">Impacto medible</h2>
+          <div class="mt-8 grid gap-5 sm:grid-cols-3">
+            <article class="rounded-2xl border border-white/20 bg-white/10 p-5" aria-label="Métrica de reducción de tareas manuales">
+              <p class="text-3xl font-extrabold text-accent">-45%</p>
+              <p class="mt-2 text-sm text-slate-100">de tiempo en tareas manuales de selección</p>
+            </article>
+            <article class="rounded-2xl border border-white/20 bg-white/10 p-5" aria-label="Métrica de mejora en tiempo de respuesta">
+              <p class="text-3xl font-extrabold text-accent">24h</p>
+              <p class="mt-2 text-sm text-slate-100">objetivo de resolución para soporte SLA</p>
+            </article>
+            <article class="rounded-2xl border border-white/20 bg-white/10 p-5" aria-label="Métrica de visibilidad ejecutiva">
+              <p class="text-3xl font-extrabold text-accent">Tiempo real</p>
+              <p class="mt-2 text-sm text-slate-100">dashboard unificado para dirección ejecutiva</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer id="contacto" class="border-t border-slate-200 bg-white" aria-label="Pie de página con información de contacto">
+      <div class="mx-auto grid w-full max-w-7xl gap-6 px-4 py-8 sm:px-6 md:grid-cols-2 lg:px-8">
+        <div>
+          <h2 class="text-lg font-extrabold text-brand">Nexova Solutions</h2>
+          <p class="mt-2 text-sm text-slate-600">Consultoría de talento, formación y soporte B2B en España y Estados Unidos.</p>
+        </div>
+
+        <address class="not-italic text-sm text-slate-700" aria-label="Información de contacto de Nexova Solutions">
+          <p><strong>Tel:</strong> +34 960 000 120</p>
+          <p><strong>Email:</strong> contacto@nexovasolutions.com</p>
+          <p><strong>Dirección:</strong> Avenida de la Innovación 45, Valencia, España</p>
+        </address>
+      </div>
+    </footer>
+  </body>
+</html>
