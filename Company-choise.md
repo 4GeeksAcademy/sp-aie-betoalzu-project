@@ -7,3 +7,6 @@ Me interesa mucho cómo se automatizará el sistema de ranking de candidatos, y 
 Operaciones de selección: Porque es el departamento que representa el mayor beneficio económico para la empresa. Y las personas que allí participan pierden mucho tiempo en cosas triviales que podría hacer la IA
 
 Tecnología e infraestructura: Tienen sistemas muy arcaicos los cuales ni siquiera están relacionados entre si. Podria potenciar mucho a la empresa si se actualiza de manera eficiente
+
+## Mi agente de IA
+Construiría un agente central que conecte ventas, selección, soporte, formación y RRHH para automatizar tareas repetitivas, priorizar casos y dar seguimiento en tiempo real. Este agente usaría datos unificados y RAG para responder preguntas, sugerir acciones y generar reportes automáticos para cada responsable. Así Nexova reduciría trabajo manual, cumpliría mejor sus SLAs y tomaría decisiones con información actualizada.
