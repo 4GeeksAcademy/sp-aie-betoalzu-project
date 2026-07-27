@@ -1,12 +1,16 @@
-// Tipos e interfaces centrales para Nexova
-
-
 export type EnglishLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | "Nativo";
 export type SeniorityLevel = "Junior" | "Semi-Senior" | "Senior" | "Lead" | "Ejecutivo";
 export type AvailabilityStatus = "Inmediata" | "2 semanas" | "1 mes" | "No disponible";
 export type CandidateStatus = "Activo" | "En proceso" | "Contratado" | "Inactivo";
 export type VacancyStatus = "Abierta" | "En progreso" | "Cerrada" | "En espera";
 export type ContractType = "Indefinido" | "Fijo discontinuo" | "Temporal" | "Cualquier contrato";
+export type PreferredSchedule =
+  | "Jornada completa"
+  | "Jornada parcial"
+  | "Jornada intensiva"
+  | "Turno partido"
+  | "Cualquier horario";
+
 export type ProcessStage =
   | "Cribado"
   | "Entrevista"
@@ -16,7 +20,6 @@ export type ProcessStage =
   | "Rechazado"
   | "Contratado";
 
-// Representa un candidato en el sistema de Nexova
 export interface Candidate {
   id: string;
   fullName: string;
@@ -33,16 +36,15 @@ export interface Candidate {
     country: string;
     city: string;
     zipCode: string;
-    adress?: string;
+    address?: string;
   };
   remoteOnly: boolean;
   status: CandidateStatus;
   referredBy?: string;
   preferredContractType?: ContractType;
-  preferredSchedule?: "Jornada completa" | "Jornada parcial" | "Jornada Intensiva" | "Turno Partido" | "Cualquier horario";
-  }
+  preferredSchedule?: PreferredSchedule;
+}
 
-// Representa una vacante (posición abierta) en Nexova
 export interface Vacancy {
   id: string;
   title: string;
@@ -64,9 +66,10 @@ export interface Vacancy {
   benefits?: string[];
   applicationDeadline?: Date;
   contractType?: ContractType;
+  preferredContractType?: ContractType;
+  preferredSchedule?: PreferredSchedule;
 }
 
-// Rastrea el progreso de un candidato en un proceso de selección
 export interface SelectionProcess {
   id: string;
   candidateId: string;

@@ -14,7 +14,15 @@ type HomePageProps = {
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const resolvedSearchParams = await searchParams;
-  const candidates = await getCandidates();
+  let candidates = [];
+  let loadError = '';
+
+  try {
+    candidates = await getCandidates();
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : 'No fue posible cargar las candidaturas';
+  }
+
   const q = (resolvedSearchParams?.q || '').trim().toLowerCase();
   const status = resolvedSearchParams?.status || '';
   const stage = resolvedSearchParams?.stage || '';
@@ -61,6 +69,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <p className="mb-4 text-sm text-slate-600">Acota por busqueda, estado o etapa para priorizar acciones.</p>
         <CandidateFilters stages={stageOptions} statuses={statusOptions} />
       </div>
+
+      {loadError && (
+        <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">No se pudo conectar con la API del backoffice.</p>
+          <p className="mt-1">Detalle: {loadError}</p>
+          <p className="mt-1">Revisa NEXT_PUBLIC_API_URL en el entorno del proyecto.</p>
+        </div>
+      )}
 
       <div className="surface-card overflow-x-auto">
         <CandidateTable candidates={filteredCandidates} />
