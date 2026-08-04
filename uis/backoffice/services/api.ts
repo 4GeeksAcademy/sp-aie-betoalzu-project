@@ -1,4 +1,5 @@
 import { Candidate, Note, CandidateForm } from '../types/candidate';
+import { Supplier, SupplierInput } from '../types/supplier';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -219,4 +220,73 @@ export async function exportIncidentResults() {
   const blob = await res.blob();
 
   return { blob, fileName };
+}
+
+function normalizeSupplier(payload: Supplier): Supplier {
+  return {
+    ...payload,
+    contract_renewal_date: payload.contract_renewal_date || null,
+    contact_email: payload.contact_email || null,
+    notes: payload.notes || null,
+  };
+}
+
+function toSupplierPayload(data: SupplierInput) {
+  return {
+    ...data,
+    contract_renewal_date: data.contract_renewal_date || null,
+    contact_email: data.contact_email || null,
+    notes: data.notes || null,
+  };
+}
+
+export async function getSuppliers() {
+  const res = await fetch('/api/suppliers', { cache: 'no-store' });
+  const data = await handleResponse(res);
+  if (!Array.isArray(data)) return [];
+
+  return (data as Supplier[])
+    .map((item) => normalizeSupplier(item))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+}
+
+export async function createSupplier(data: SupplierInput) {
+  const res = await fetch('/api/suppliers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(toSupplierPayload(data)),
+  });
+
+  const response = await handleResponse(res);
+  return normalizeSupplier(response as Supplier);
+}
+
+export async function updateSupplier(id: number, data: Partial<SupplierInput>) {
+  const res = await fetch(`/api/suppliers/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const response = await handleResponse(res);
+  return normalizeSupplier(response as Supplier);
+}
+
+export async function updateSupplierStatus(id: number, status: Supplier['status']) {
+  const res = await fetch(`/api/suppliers/${id}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+
+  const response = await handleResponse(res);
+  return normalizeSupplier(response as Supplier);
+}
+
+export async function deleteSupplier(id: number) {
+  const res = await fetch(`/api/suppliers/${id}`, {
+    method: 'DELETE',
+  });
+
+  await handleResponse(res);
 }

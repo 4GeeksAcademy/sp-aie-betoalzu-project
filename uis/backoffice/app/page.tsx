@@ -11,6 +11,11 @@ const tools = [
     description: 'Carga CSV de tickets para validar datos, detectar errores y exportar resumen operativo.',
     href: '/incident-analyzer',
   },
+  {
+    name: 'Gestion de Proveedores',
+    description: 'Consulta, crea, actualiza y elimina proveedores con seguimiento de estado activo o suspendido.',
+    href: '/suppliers',
+  },
 ];
 
 export default function BackofficeHomePage() {
