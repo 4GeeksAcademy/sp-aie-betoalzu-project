@@ -58,6 +58,12 @@ export default function RootLayout({
                   Talent Pipeline Tracker
                 </Link>
                 <Link
+                  href="/incident-analyzer"
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-slate-700 transition hover:text-brand"
+                >
+                  Analizador de Incidentes
+                </Link>
+                <Link
                   href="/talent-pipeline-tracker/Candidates/new"
                   className="rounded-full bg-brand px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-dark"
                 >

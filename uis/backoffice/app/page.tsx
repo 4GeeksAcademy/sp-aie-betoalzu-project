@@ -6,6 +6,11 @@ const tools = [
     description: 'Gestiona candidaturas, filtros, etapas y notas internas del equipo de seleccion.',
     href: '/talent-pipeline-tracker',
   },
+  {
+    name: 'Analizador de Incidentes',
+    description: 'Carga CSV de tickets para validar datos, detectar errores y exportar resumen operativo.',
+    href: '/incident-analyzer',
+  },
 ];
 
 export default function BackofficeHomePage() {

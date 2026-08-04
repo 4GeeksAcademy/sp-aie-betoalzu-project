@@ -2,6 +2,31 @@ import { Candidate, Note, CandidateForm } from '../types/candidate';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+export type IncidentInvalidRules = {
+  missing_client_company: number;
+  invalid_category: number;
+  invalid_description: number;
+  invalid_agent: number;
+  invalid_status: number;
+  invalid_email: number;
+  closed_no_score: number;
+  score_out_of_range: number;
+};
+
+export type IncidentSummary = {
+  source_file: string;
+  total_records: number;
+  valid_records: number;
+  invalid_records: number;
+  invalid_rules: IncidentInvalidRules;
+  categories: Record<string, number>;
+  statuses: Record<string, number>;
+  scores: Record<string, number>;
+  closed_tickets: number;
+  scored_tickets: number;
+  average_score: number;
+};
+
 type CandidateApi = Omit<Candidate, 'linkedin'> & {
   linkedin?: string | null;
   linkedin_url?: string | null;
@@ -39,15 +64,26 @@ async function handleResponse(res: Response) {
 }
 
 function getApiUrl() {
-  if (!API_URL) throw new Error('Falta NEXT_PUBLIC_API_URL en la configuración');
-  return API_URL;
+  // Fallback al mismo origen cuando el front y la API comparten host.
+  return (API_URL || '').replace(/\/$/, '');
 }
 
-function extractCandidateList(data: any): CandidateApi[] {
+function extractCandidateList(data: unknown): CandidateApi[] {
   if (Array.isArray(data)) return data as CandidateApi[];
-  if (Array.isArray(data?.results)) return data.results as CandidateApi[];
-  if (Array.isArray(data?.data)) return data.data as CandidateApi[];
+
+  if (data && typeof data === 'object') {
+    const payload = data as { results?: unknown; data?: unknown };
+    if (Array.isArray(payload.results)) return payload.results as CandidateApi[];
+    if (Array.isArray(payload.data)) return payload.data as CandidateApi[];
+  }
+
   return [];
+}
+
+function extractTotalCount(data: unknown): number | null {
+  if (!data || typeof data !== 'object') return null;
+  const payload = data as { total?: unknown };
+  return typeof payload.total === 'number' ? payload.total : null;
 }
 
 export async function getCandidates(params?: Record<string, string>) {
@@ -76,7 +112,7 @@ export async function getCandidates(params?: Record<string, string>) {
     if (!pageItems.length) break;
 
     all.push(...pageItems);
-    total = typeof data?.total === 'number' ? data.total : all.length;
+    total = extractTotalCount(data) ?? all.length;
     page += 1;
 
     if (page > 50) break;
@@ -146,4 +182,41 @@ export async function deleteNote(candidateId: string, noteId: string) {
     method: 'DELETE',
   });
   if (!res.ok) throw new Error('Error al eliminar la nota');
+}
+
+export async function analyzeIncidentsCsv(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch('/api/incidents/analyze', {
+    method: 'POST',
+    body: form,
+  });
+
+  return (await handleResponse(res)) as IncidentSummary;
+}
+
+export async function exportIncidentResults() {
+  const res = await fetch('/api/incidents/results/export', {
+    method: 'GET',
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const payload = isJson ? await res.json() : await res.text();
+    const message =
+      typeof payload === 'string'
+        ? payload
+        : payload?.detail || payload?.message || payload?.error || 'Error en la petición';
+    throw new Error(`${message} (HTTP ${res.status})`);
+  }
+
+  const contentDisposition = res.headers.get('content-disposition') || '';
+  const match = contentDisposition.match(/filename="?([^\"]+)"?/i);
+  const fileName = match?.[1] || 'incident-metrics.csv';
+  const blob = await res.blob();
+
+  return { blob, fileName };
 }
