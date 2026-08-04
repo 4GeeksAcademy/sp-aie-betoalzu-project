@@ -8,9 +8,12 @@ except ImportError:
 
 import os, subprocess
 
+from services.api.routes import incidents_api
+
 static_file_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), './')
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0 #disable cache
+app.register_blueprint(incidents_api)
 
 # Serving the index file
 @app.route('/', methods=['GET'])
@@ -34,4 +37,5 @@ def serve_any_other_file(path):
     response.cache_control.max_age = 0 # avoid cache memory
     return response
 
-app.run(host='0.0.0.0',port=3000, debug=True, extra_files=['./',])
+if __name__ == '__main__':
+    app.run(host='0.0.0.0',port=3000, debug=True, extra_files=['./',])
