@@ -1,0 +1,222 @@
+import { Candidate, Note, CandidateForm } from '../types/candidate';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+export type IncidentInvalidRules = {
+  missing_client_company: number;
+  invalid_category: number;
+  invalid_description: number;
+  invalid_agent: number;
+  invalid_status: number;
+  invalid_email: number;
+  closed_no_score: number;
+  score_out_of_range: number;
+};
+
+export type IncidentSummary = {
+  source_file: string;
+  total_records: number;
+  valid_records: number;
+  invalid_records: number;
+  invalid_rules: IncidentInvalidRules;
+  categories: Record<string, number>;
+  statuses: Record<string, number>;
+  scores: Record<string, number>;
+  closed_tickets: number;
+  scored_tickets: number;
+  average_score: number;
+};
+
+type CandidateApi = Omit<Candidate, 'linkedin'> & {
+  linkedin?: string | null;
+  linkedin_url?: string | null;
+};
+
+function normalizeCandidate(candidate: CandidateApi): Candidate {
+  return {
+    ...candidate,
+    linkedin: candidate.linkedin ?? candidate.linkedin_url ?? '',
+  };
+}
+
+function toApiPayload(data: CandidateForm | Partial<CandidateForm>) {
+  const { linkedin, ...rest } = data;
+  return {
+    ...rest,
+    ...(linkedin !== undefined ? { linkedin_url: linkedin } : {}),
+  };
+}
+
+async function handleResponse(res: Response) {
+  const contentType = res.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  const payload = isJson ? await res.json() : await res.text();
+
+  if (!res.ok) {
+    const message =
+      typeof payload === 'string'
+        ? payload
+        : payload?.detail || payload?.message || payload?.error || 'Error en la petición';
+    throw new Error(`${message} (HTTP ${res.status})`);
+  }
+
+  return payload;
+}
+
+function getApiUrl() {
+  // Fallback al mismo origen cuando el front y la API comparten host.
+  return (API_URL || '').replace(/\/$/, '');
+}
+
+function extractCandidateList(data: unknown): CandidateApi[] {
+  if (Array.isArray(data)) return data as CandidateApi[];
+
+  if (data && typeof data === 'object') {
+    const payload = data as { results?: unknown; data?: unknown };
+    if (Array.isArray(payload.results)) return payload.results as CandidateApi[];
+    if (Array.isArray(payload.data)) return payload.data as CandidateApi[];
+  }
+
+  return [];
+}
+
+function extractTotalCount(data: unknown): number | null {
+  if (!data || typeof data !== 'object') return null;
+  const payload = data as { total?: unknown };
+  return typeof payload.total === 'number' ? payload.total : null;
+}
+
+export async function getCandidates(params?: Record<string, string>) {
+  if (params) {
+    const query = '?' + new URLSearchParams(params).toString();
+    const res = await fetch(`${getApiUrl()}/records${query}`, { cache: 'no-store' });
+    const data = await handleResponse(res);
+    const list = extractCandidateList(data);
+    if (!list.length) throw new Error('Formato inesperado de respuesta de la API');
+    return list
+      .map((item) => normalizeCandidate(item))
+      .sort((a, b) => new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime());
+  }
+
+  const pageSize = 100;
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+  const all: CandidateApi[] = [];
+
+  while (all.length < total) {
+    const query = new URLSearchParams({ page: String(page), limit: String(pageSize) }).toString();
+    const res = await fetch(`${getApiUrl()}/records?${query}`, { cache: 'no-store' });
+    const data = await handleResponse(res);
+    const pageItems = extractCandidateList(data);
+
+    if (!pageItems.length) break;
+
+    all.push(...pageItems);
+    total = extractTotalCount(data) ?? all.length;
+    page += 1;
+
+    if (page > 50) break;
+  }
+
+  return all
+    .map((item) => normalizeCandidate(item))
+    .sort((a, b) => new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime());
+}
+
+export async function getCandidate(id: string) {
+  const res = await fetch(`${getApiUrl()}/records/${id}`, { cache: 'no-store' });
+  const data = await handleResponse(res);
+  return normalizeCandidate(data as CandidateApi);
+}
+
+export async function createCandidate(data: CandidateForm) {
+  const res = await fetch(`${getApiUrl()}/records`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(toApiPayload(data)),
+  });
+  const response = await handleResponse(res);
+  return normalizeCandidate(response as CandidateApi);
+}
+
+export async function updateCandidate(id: string, data: Partial<CandidateForm>) {
+  const res = await fetch(`${getApiUrl()}/records/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(toApiPayload(data)),
+  });
+  const response = await handleResponse(res);
+  return normalizeCandidate(response as CandidateApi);
+}
+
+export async function patchCandidate(id: string, data: Partial<CandidateForm>) {
+  const res = await fetch(`${getApiUrl()}/records/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(toApiPayload(data)),
+  });
+  const response = await handleResponse(res);
+  return normalizeCandidate(response as CandidateApi);
+}
+
+export async function getNotes(candidateId: string) {
+  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes`, { cache: 'no-store' });
+  const data = await handleResponse(res);
+  if (Array.isArray(data)) return data as Note[];
+  if (Array.isArray(data.results)) return data.results as Note[];
+  if (Array.isArray(data.data)) return data.data as Note[];
+  return [];
+}
+
+export async function addNote(candidateId: string, content: string) {
+  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  return handleResponse(res) as Promise<Note>;
+}
+
+export async function deleteNote(candidateId: string, noteId: string) {
+  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes/${noteId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Error al eliminar la nota');
+}
+
+export async function analyzeIncidentsCsv(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch('/api/incidents/analyze', {
+    method: 'POST',
+    body: form,
+  });
+
+  return (await handleResponse(res)) as IncidentSummary;
+}
+
+export async function exportIncidentResults() {
+  const res = await fetch('/api/incidents/results/export', {
+    method: 'GET',
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const contentType = res.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const payload = isJson ? await res.json() : await res.text();
+    const message =
+      typeof payload === 'string'
+        ? payload
+        : payload?.detail || payload?.message || payload?.error || 'Error en la petición';
+    throw new Error(`${message} (HTTP ${res.status})`);
+  }
+
+  const contentDisposition = res.headers.get('content-disposition') || '';
+  const match = contentDisposition.match(/filename="?([^\"]+)"?/i);
+  const fileName = match?.[1] || 'incident-metrics.csv';
+  const blob = await res.blob();
+
+  return { blob, fileName };
+}
