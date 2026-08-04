@@ -1,0 +1,18 @@
+[project]
+name = "sp-aie-betoalzu-project"
+version = "0.1.0"
+description = "Utility scripts for Nexova project"
+requires-python = ">=3.11"
+dependencies = [
+    "tinydb>=4.8.0",
+]
+
+[project.scripts]
+seed = "scripts.seed:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scripts*"]

@@ -1,0 +1,11 @@
+README.md
+pyproject.toml
+scripts/__init__.py
+scripts/analyze.py
+scripts/seed.py
+sp_aie_betoalzu_project.egg-info/PKG-INFO
+sp_aie_betoalzu_project.egg-info/SOURCES.txt
+sp_aie_betoalzu_project.egg-info/dependency_links.txt
+sp_aie_betoalzu_project.egg-info/entry_points.txt
+sp_aie_betoalzu_project.egg-info/requires.txt
+sp_aie_betoalzu_project.egg-info/top_level.txt
