@@ -1,14 +1,8 @@
-# Autenticar y asegurar APIS
-Ya están listas las apis, pero como estan en este momento, las puede usar cualquiera intercepte las peticiones con herramientas de terceros. Lo que haremos es aplicar autenticacion para poder usar los endpoints y poder enviar peticiones 
+# Protección de rutas
+- Aplica get_current_user como dependencia a cada ruta que no deba ser pública. Como mínimo: todos los endpoints de /users excepto POST/users,auth/me y al menos otras 5 rutas existentes de la API de tu monorepo (fuera de /users y /auth) que expongan o modifiquen datos sensibles.
+- Devuelve 401 Unauthorized para solicitudes no autenticadas y 403 Forbidden cuando un usuario intenta acceder a un recurso que no le pertenece.
 
-## tarea
-- En `services/api/users`
-- Crea un modelo para el usuario con tinyDB con: id, email, hashed_password, is_active, role, created_at. No almacenes nombres ni datos de contacto en user
-- el campo role debe aceptar solo admin, manager o user, siendo user la seleccion default, marca como error cualquier otra opción
-- implementa una capa de servicios con funciones para: crear usuario, obtener usuario por id, obtener usuario por email, actualizar y eliminar usuario
-- Expón esos servicios como endpoints REST bajo /users:
-    - POST /users - registrar un nuevo usuario (hashear la contraseña antes de guardar). Acepta campos opcionales de perfil inicial (name, phone, address) y crea el Profile vinculado en la misma operación.
-    - GET /users listar todos los usuarios (protegida).
-    - GET /users/{id} obtener un usuario por ID (protegida).
-    - PUT /users/{id} actualizar campos de credenciales como email, y role cuando quien llama es admin (protegida; solo el propio usuario o un admin).
-    - DELETE /users/{id} eliminar un usuario (protegida). También elimina el perfil vinculado.
+# Verificación
+- Verifica el flujo completo manualmente usando los docs interactivos de FastAPI (/docs): registro con POST /users login → copiar token → usar el token en una ruta protegida.
+- Confirma que llamar a una ruta protegida sin token devuelve 401
+- Confirma que llamar a una ruta protegida con un token expirado o mal formado devuelve 401

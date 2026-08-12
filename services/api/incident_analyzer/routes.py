@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from services.api.incident_analyzer import (
@@ -13,6 +13,8 @@ from services.api.incident_analyzer import (
     build_metrics_csv,
     build_summary,
 )
+from services.api.users.auth import get_current_user
+from services.api.users.models import UserInDB
 
 
 incidents_api = APIRouter()
@@ -24,7 +26,7 @@ def _json_error(message: str, status_code: int):
 
 
 @incidents_api.post("/api/incidents/analyze")
-async def analyze_incidents(file: UploadFile | None = File(default=None)):
+async def analyze_incidents(file: UploadFile | None = File(default=None), current_user: UserInDB = Depends(get_current_user)):
     global _last_analysis
 
     if file is None:
@@ -56,7 +58,7 @@ async def analyze_incidents(file: UploadFile | None = File(default=None)):
 
 
 @incidents_api.get("/api/incidents/results/export")
-async def export_incident_results():
+async def export_incident_results(current_user: UserInDB = Depends(get_current_user)):
     global _last_analysis
     if _last_analysis is None:
         return _json_error("No hay analisis previo para exportar.", 404)

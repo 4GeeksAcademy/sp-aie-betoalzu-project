@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from tinydb import TinyDB
 
 from services.api.suppliers import Country, Supplier, SupplierCategory, SupplierCreate, SupplierStatus, SupplierUpdate
+from services.api.users.auth import get_current_user
+from services.api.users.models import UserInDB
 
 
 suppliers_api = APIRouter()
@@ -42,7 +44,7 @@ def _open_suppliers_table():
 
 
 @suppliers_api.post("/suppliers", status_code=201)
-def create_supplier(supplier: SupplierCreate):
+def create_supplier(supplier: SupplierCreate, current_user: UserInDB = Depends(get_current_user)):
     db, table = _open_suppliers_table()
     try:
         supplier_data = supplier.model_dump(mode="json")
@@ -57,6 +59,7 @@ def create_supplier(supplier: SupplierCreate):
 def list_suppliers(
     country: Country | None = Query(default=None),
     category: SupplierCategory | None = Query(default=None),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     db, table = _open_suppliers_table()
     try:
@@ -78,7 +81,7 @@ def list_suppliers(
 
 
 @suppliers_api.get("/suppliers/{supplier_id}")
-def get_supplier(supplier_id: int):
+def get_supplier(supplier_id: int, current_user: UserInDB = Depends(get_current_user)):
     db, table = _open_suppliers_table()
     try:
         supplier = table.get(doc_id=supplier_id)
@@ -91,7 +94,7 @@ def get_supplier(supplier_id: int):
 
 
 @suppliers_api.put("/suppliers/{supplier_id}")
-def update_supplier(supplier_id: int, payload: SupplierUpdate):
+def update_supplier(supplier_id: int, payload: SupplierUpdate, current_user: UserInDB = Depends(get_current_user)):
     db, table = _open_suppliers_table()
     try:
         supplier = table.get(doc_id=supplier_id)
@@ -118,7 +121,7 @@ def update_supplier(supplier_id: int, payload: SupplierUpdate):
 
 
 @suppliers_api.patch("/suppliers/{supplier_id}/rate")
-def update_supplier_rate(supplier_id: int, payload: SupplierRateUpdate):
+def update_supplier_rate(supplier_id: int, payload: SupplierRateUpdate, current_user: UserInDB = Depends(get_current_user)):
     db, table = _open_suppliers_table()
     try:
         supplier = table.get(doc_id=supplier_id)
@@ -140,7 +143,7 @@ def update_supplier_rate(supplier_id: int, payload: SupplierRateUpdate):
 
 
 @suppliers_api.patch("/suppliers/{supplier_id}/status")
-def update_supplier_status(supplier_id: int, payload: SupplierStatusUpdate):
+def update_supplier_status(supplier_id: int, payload: SupplierStatusUpdate, current_user: UserInDB = Depends(get_current_user)):
     db, table = _open_suppliers_table()
     try:
         supplier = table.get(doc_id=supplier_id)
@@ -162,7 +165,7 @@ def update_supplier_status(supplier_id: int, payload: SupplierStatusUpdate):
 
 
 @suppliers_api.delete("/suppliers/{supplier_id}")
-def delete_supplier(supplier_id: int):
+def delete_supplier(supplier_id: int, current_user: UserInDB = Depends(get_current_user)):
     db, table = _open_suppliers_table()
     try:
         supplier = table.get(doc_id=supplier_id)
