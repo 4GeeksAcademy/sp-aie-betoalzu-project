@@ -8,11 +8,17 @@ except ImportError:
 
 import os, subprocess
 
-from services.api.routes import incidents_api
+from services.api.incident_analyzer.routes import incidents_api as incident_analyzer_api
+from services.api.suppliers.routes import suppliers_api
+from services.api.users.routes import users_api
+from services.api.profiles.routes import profiles_api
 
 static_file_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), './')
 app = FastAPI()
-app.include_router(incidents_api)
+app.include_router(incident_analyzer_api)
+app.include_router(suppliers_api)
+app.include_router(users_api)
+app.include_router(profiles_api)
 
 # Serving the index file
 @app.get('/')

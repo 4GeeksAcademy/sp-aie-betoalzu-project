@@ -3,4 +3,6 @@ Name: sp-aie-betoalzu-project
 Version: 0.1.0
 Summary: Utility scripts for Nexova project
 Requires-Python: >=3.11
+Requires-Dist: passlib[bcrypt]>=1.7.4
+Requires-Dist: python-jose[cryptography]>=3.5.0
 Requires-Dist: tinydb>=4.8.0
