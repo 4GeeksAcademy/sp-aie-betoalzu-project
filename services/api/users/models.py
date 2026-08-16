@@ -60,3 +60,22 @@ class UserInDB(BaseModel):
     role: Role
     created_at: str
     profile: Profile | None = None
+
+
+# ---------------------------------------------------------------------------
+# Password reset models
+# ---------------------------------------------------------------------------
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=6)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)

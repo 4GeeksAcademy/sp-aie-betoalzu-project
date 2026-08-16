@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Routes that do NOT require authentication.
  * The website public site and auth pages remain open.
  */
-const PUBLIC_PATHS = ['/login', '/register', '/website', '/api'];
+const PUBLIC_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/website', '/api'];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(

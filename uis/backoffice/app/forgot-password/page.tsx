@@ -1,20 +1,14 @@
 'use client';
 
-import { useState, type FormEvent, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useAuth } from '../../lib/auth-context';
+import { forgotPasswordApi } from '../../services/auth-api';
 
-function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { login } = useAuth();
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const resetSuccess = searchParams.get('reset') === 'success';
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -22,14 +16,42 @@ function LoginForm() {
     setSubmitting(true);
 
     try {
-      await login(email, password);
-      router.push('/');
+      await forgotPasswordApi(email);
+      setSubmitted(true);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al iniciar sesion';
+      const msg = err instanceof Error ? err.message : 'Error al enviar la solicitud';
       setError(msg);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (submitted) {
+    return (
+      <main className="mx-auto flex min-h-[calc(100vh-64px)] items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          <div className="surface-card p-8 text-center">
+            <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+              <svg className="h-7 w-7 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+              Correo enviado
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Si esa direccion de correo esta registrada, recibiras un enlace para restablecer tu contrasena en breve.
+            </p>
+            <Link
+              href="/login"
+              className="mt-6 inline-block rounded-full bg-brand px-5 py-3 text-sm font-bold text-white transition hover:bg-brand-dark"
+            >
+              Volver a iniciar sesion
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -41,18 +63,12 @@ function LoginForm() {
               NX
             </span>
             <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900">
-              Iniciar sesion
+              Olvidaste tu contrasena?
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Accede al backoffice de Nexova
+              Introduce tu correo y te enviaremos un enlace para restablecerla
             </p>
           </div>
-
-          {resetSuccess && (
-            <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">
-              Contrasena restablecida correctamente. Inicia sesion con tu nueva contrasena.
-            </div>
-          )}
 
           {error && (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -74,55 +90,26 @@ function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                 placeholder="tu@email.com"
+                disabled={submitting}
               />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="mb-1 block text-sm font-semibold text-slate-700">
-                Contrasena
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                placeholder="Minimo 6 caracteres"
-              />
-              <div className="mt-1 text-right">
-                <Link href="/forgot-password" className="text-xs font-semibold text-brand hover:underline">
-                  Olvidaste tu contrasena?
-                </Link>
-              </div>
             </div>
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !email}
               className="w-full rounded-full bg-brand px-5 py-3 text-sm font-bold text-white transition hover:bg-brand-dark disabled:opacity-50"
             >
-              {submitting ? 'Entrando...' : 'Entrar'}
+              {submitting ? 'Enviando...' : 'Enviar enlace'}
             </button>
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">
-            No tienes cuenta?{' '}
-            <Link href="/register" className="font-semibold text-brand hover:underline">
-              Registrate
+            <Link href="/login" className="font-semibold text-brand hover:underline">
+              Volver a iniciar sesion
             </Link>
           </p>
         </div>
       </div>
     </main>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
   );
 }

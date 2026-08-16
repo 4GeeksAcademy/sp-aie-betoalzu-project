@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -182,6 +182,86 @@ def delete_user(user_id: int) -> bool:
         if doc is None:
             return False
         table.remove(doc_ids=[user_id])
+        return True
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Password reset token helpers
+# ---------------------------------------------------------------------------
+
+
+def _open_reset_tokens_table():
+    """Open the DB and return (db, reset_tokens_table)."""
+    db = TinyDB(str(_get_db_path()))
+    return db, db.table("reset_tokens")
+
+
+def store_reset_token(email: str, token_hash: str, expires_at: str) -> None:
+    """Persist a hashed reset token so we can validate + invalidate it later."""
+    db, table = _open_reset_tokens_table()
+    try:
+        TokenQuery = Query()
+        # Remove any previous tokens for this email (invalidate old ones)
+        table.remove(TokenQuery.email == email)
+        table.insert({
+            "email": email,
+            "token_hash": token_hash,
+            "expires_at": expires_at,
+            "used": False,
+        })
+    finally:
+        db.close()
+
+
+def validate_reset_token(email: str, token_hash: str) -> bool:
+    """Check whether a given token hash exists, is not expired and not used."""
+    db, table = _open_reset_tokens_table()
+    try:
+        TokenQuery = Query()
+        results = table.search(
+            (TokenQuery.email == email)
+            & (TokenQuery.token_hash == token_hash)
+            & (TokenQuery.used == False)
+        )
+        if not results:
+            return False
+        doc = results[0]
+        expires_at = datetime.fromisoformat(doc["expires_at"])
+        if expires_at < datetime.now(timezone.utc):
+            return False
+        return True
+    finally:
+        db.close()
+
+
+def invalidate_reset_token(email: str, token_hash: str) -> None:
+    """Mark a reset token as used so it cannot be reused."""
+    db, table = _open_reset_tokens_table()
+    try:
+        TokenQuery = Query()
+        table.update(
+            {"used": True},
+            (TokenQuery.email == email) & (TokenQuery.token_hash == token_hash),
+        )
+    finally:
+        db.close()
+
+
+def update_user_password(email: str, new_hashed_password: str) -> bool:
+    """Update the hashed password for a user identified by email.
+
+    Returns True if the user was found and updated.
+    """
+    db, table = _open_users_table()
+    try:
+        UserQuery = Query()
+        results = table.search(UserQuery.email == email)
+        if not results:
+            return False
+        doc = results[0]
+        table.update({"hashed_password": new_hashed_password}, doc_ids=[doc.doc_id])
         return True
     finally:
         db.close()
