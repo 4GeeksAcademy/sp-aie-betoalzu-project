@@ -1,5 +1,6 @@
 import { Candidate, Note, CandidateForm } from '../types/candidate';
 import { Supplier, SupplierInput } from '../types/supplier';
+import { getAuthHeaders } from '../lib/auth-token';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -69,6 +70,15 @@ function getApiUrl() {
   return (API_URL || '').replace(/\/$/, '');
 }
 
+/** Merge default JSON headers with the current Authorization header. */
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    ...getAuthHeaders(),
+    ...extra,
+  };
+}
+
 function extractCandidateList(data: unknown): CandidateApi[] {
   if (Array.isArray(data)) return data as CandidateApi[];
 
@@ -90,7 +100,10 @@ function extractTotalCount(data: unknown): number | null {
 export async function getCandidates(params?: Record<string, string>) {
   if (params) {
     const query = '?' + new URLSearchParams(params).toString();
-    const res = await fetch(`${getApiUrl()}/records${query}`, { cache: 'no-store' });
+    const res = await fetch(`${getApiUrl()}/records${query}`, {
+      cache: 'no-store',
+      headers: authHeaders(),
+    });
     const data = await handleResponse(res);
     const list = extractCandidateList(data);
     if (!list.length) throw new Error('Formato inesperado de respuesta de la API');
@@ -106,7 +119,10 @@ export async function getCandidates(params?: Record<string, string>) {
 
   while (all.length < total) {
     const query = new URLSearchParams({ page: String(page), limit: String(pageSize) }).toString();
-    const res = await fetch(`${getApiUrl()}/records?${query}`, { cache: 'no-store' });
+    const res = await fetch(`${getApiUrl()}/records?${query}`, {
+      cache: 'no-store',
+      headers: authHeaders(),
+    });
     const data = await handleResponse(res);
     const pageItems = extractCandidateList(data);
 
@@ -125,7 +141,10 @@ export async function getCandidates(params?: Record<string, string>) {
 }
 
 export async function getCandidate(id: string) {
-  const res = await fetch(`${getApiUrl()}/records/${id}`, { cache: 'no-store' });
+  const res = await fetch(`${getApiUrl()}/records/${id}`, {
+    cache: 'no-store',
+    headers: authHeaders(),
+  });
   const data = await handleResponse(res);
   return normalizeCandidate(data as CandidateApi);
 }
@@ -133,7 +152,7 @@ export async function getCandidate(id: string) {
 export async function createCandidate(data: CandidateForm) {
   const res = await fetch(`${getApiUrl()}/records`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(toApiPayload(data)),
   });
   const response = await handleResponse(res);
@@ -143,7 +162,7 @@ export async function createCandidate(data: CandidateForm) {
 export async function updateCandidate(id: string, data: Partial<CandidateForm>) {
   const res = await fetch(`${getApiUrl()}/records/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(toApiPayload(data)),
   });
   const response = await handleResponse(res);
@@ -153,7 +172,7 @@ export async function updateCandidate(id: string, data: Partial<CandidateForm>) 
 export async function patchCandidate(id: string, data: Partial<CandidateForm>) {
   const res = await fetch(`${getApiUrl()}/records/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(toApiPayload(data)),
   });
   const response = await handleResponse(res);
@@ -161,7 +180,10 @@ export async function patchCandidate(id: string, data: Partial<CandidateForm>) {
 }
 
 export async function getNotes(candidateId: string) {
-  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes`, { cache: 'no-store' });
+  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes`, {
+    cache: 'no-store',
+    headers: authHeaders(),
+  });
   const data = await handleResponse(res);
   if (Array.isArray(data)) return data as Note[];
   if (Array.isArray(data.results)) return data.results as Note[];
@@ -172,7 +194,7 @@ export async function getNotes(candidateId: string) {
 export async function addNote(candidateId: string, content: string) {
   const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({ content }),
   });
   return handleResponse(res) as Promise<Note>;
@@ -181,6 +203,7 @@ export async function addNote(candidateId: string, content: string) {
 export async function deleteNote(candidateId: string, noteId: string) {
   const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes/${noteId}`, {
     method: 'DELETE',
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error('Error al eliminar la nota');
 }
@@ -241,7 +264,10 @@ function toSupplierPayload(data: SupplierInput) {
 }
 
 export async function getSuppliers() {
-  const res = await fetch('/api/suppliers', { cache: 'no-store' });
+  const res = await fetch('/api/suppliers', {
+    cache: 'no-store',
+    headers: authHeaders(),
+  });
   const data = await handleResponse(res);
   if (!Array.isArray(data)) return [];
 
@@ -253,7 +279,7 @@ export async function getSuppliers() {
 export async function createSupplier(data: SupplierInput) {
   const res = await fetch('/api/suppliers', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(toSupplierPayload(data)),
   });
 
@@ -264,7 +290,7 @@ export async function createSupplier(data: SupplierInput) {
 export async function updateSupplier(id: number, data: Partial<SupplierInput>) {
   const res = await fetch(`/api/suppliers/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(data),
   });
 
@@ -275,7 +301,7 @@ export async function updateSupplier(id: number, data: Partial<SupplierInput>) {
 export async function updateSupplierStatus(id: number, status: Supplier['status']) {
   const res = await fetch(`/api/suppliers/${id}/status`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify({ status }),
   });
 
@@ -286,6 +312,7 @@ export async function updateSupplierStatus(id: number, status: Supplier['status'
 export async function deleteSupplier(id: number) {
   const res = await fetch(`/api/suppliers/${id}`, {
     method: 'DELETE',
+    headers: authHeaders(),
   });
 
   await handleResponse(res);
