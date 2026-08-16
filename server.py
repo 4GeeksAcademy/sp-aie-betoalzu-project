@@ -1,5 +1,6 @@
 try:
     from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse, HTMLResponse
     import uvicorn
 except ImportError:
@@ -8,14 +9,29 @@ except ImportError:
 
 import os, subprocess
 
-from services.api.incident_analyzer.routes import incidents_api as incident_analyzer_api
+try:
+    from services.api.incident_analyzer.routes import incidents_api as incident_analyzer_api
+except (ImportError, ModuleNotFoundError):
+    incident_analyzer_api = None
+
 from services.api.suppliers.routes import suppliers_api
 from services.api.users.routes import users_api
 from services.api.profiles.routes import profiles_api
 
 static_file_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), './')
 app = FastAPI()
-app.include_router(incident_analyzer_api)
+
+# CORS — allow the Next.js dev server and any local origin during development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+if incident_analyzer_api is not None:
+    app.include_router(incident_analyzer_api)
 app.include_router(suppliers_api)
 app.include_router(users_api)
 app.include_router(profiles_api)

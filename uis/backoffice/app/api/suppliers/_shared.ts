@@ -14,12 +14,18 @@ export async function proxyToBackend(path: string, init?: RequestInit) {
     );
   }
 
+  // Forward the Authorization header from the incoming client request
+  const authHeader = init?.headers && 'Authorization' in (init.headers as Record<string, string>)
+    ? (init.headers as Record<string, string>).Authorization
+    : undefined;
+
   try {
     const response = await fetch(`${apiUrl}${path}`, {
       ...init,
       cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
+        ...(authHeader ? { Authorization: authHeader } : {}),
         ...(init?.headers || {}),
       },
     });
