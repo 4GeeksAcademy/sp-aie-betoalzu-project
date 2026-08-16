@@ -141,3 +141,52 @@ export async function updateMyProfileApi(data: {
   });
   return handleResponse<ProfileData>(res);
 }
+
+// ---------------------------------------------------------------------------
+// Password reset / change endpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/auth/forgot-password — request a password reset email.
+ */
+export async function forgotPasswordApi(email: string): Promise<{ message: string }> {
+  const res = await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+/**
+ * POST /api/auth/reset-password — reset password with token.
+ */
+export async function resetPasswordApi(
+  token: string,
+  new_password: string,
+): Promise<{ message: string }> {
+  const res = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
+
+/**
+ * POST /api/auth/change-password — change password while authenticated.
+ */
+export async function changePasswordApi(
+  current_password: string,
+  new_password: string,
+): Promise<{ message: string }> {
+  const res = await fetch('/api/auth/change-password', {
+    method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ current_password, new_password }),
+  });
+  return handleResponse<{ message: string }>(res);
+}
