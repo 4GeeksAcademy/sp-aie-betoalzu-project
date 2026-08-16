@@ -41,3 +41,12 @@ export interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
 }
+
+/** Profile data returned by GET /profiles/me */
+export interface ProfileData {
+  id: number;
+  user_id: number;
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+}

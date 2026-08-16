@@ -2,15 +2,29 @@ import type {
   LoginResponse,
   RegisterPayload,
   AuthUser,
+  ProfileData,
 } from '../types/auth';
-import { getAuthHeaders } from '../lib/auth-token';
+import { getAuthHeaders, removeStoredToken } from '../lib/auth-token';
 
+/**
+ * Handle API response and throw on errors.
+ * If a 401 is received, clears the stored token and redirects to /login.
+ */
 async function handleResponse<T>(res: Response): Promise<T> {
   const contentType = res.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
   const payload = isJson ? await res.json() : await res.text();
 
   if (!res.ok) {
+    // 401 Unauthorized — token expired or invalid
+    if (res.status === 401) {
+      removeStoredToken();
+      // Redirect to login (use window.location for full page reload to clear state)
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+
     const message =
       typeof payload === 'string'
         ? payload
@@ -75,11 +89,11 @@ export function decodeTokenPayload(token: string): { sub: string; role: string }
 }
 
 /**
- * PUT /users/{id} — update user profile (protected).
+ * PUT /users/{id} — update user credential fields (protected).
  */
-export async function updateProfileApi(
+export async function updateUserApi(
   userId: number,
-  data: { email?: string; profile?: { name?: string; phone?: string; address?: string } }
+  data: { email?: string; password?: string }
 ): Promise<AuthUser> {
   const res = await fetch(`/api/auth/me?id=${userId}`, {
     method: 'PUT',
@@ -90,4 +104,40 @@ export async function updateProfileApi(
     body: JSON.stringify(data),
   });
   return handleResponse<AuthUser>(res);
+}
+
+// ---------------------------------------------------------------------------
+// Profile endpoints — proxy to /profiles/me
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/profiles/me — get the authenticated user's profile (name, phone, address).
+ */
+export async function getMyProfileApi(): Promise<ProfileData> {
+  const res = await fetch('/api/profiles/me', {
+    method: 'GET',
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
+  return handleResponse<ProfileData>(res);
+}
+
+/**
+ * PUT /api/profiles/me — update the authenticated user's profile.
+ */
+export async function updateMyProfileApi(data: {
+  name?: string;
+  phone?: string;
+  address?: string;
+}): Promise<ProfileData> {
+  const res = await fetch('/api/profiles/me', {
+    method: 'PUT',
+    headers: {
+      ...getAuthHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ProfileData>(res);
 }

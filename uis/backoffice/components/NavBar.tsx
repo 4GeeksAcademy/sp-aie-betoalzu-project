@@ -46,7 +46,7 @@ export default function NavBar() {
               {/* Profile & Logout */}
               <div className="ml-2 flex items-center gap-2 border-l border-slate-200 pl-4">
                 <Link
-                  href="/profile"
+                  href="/account/profile"
                   className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-brand"
                 >
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand">

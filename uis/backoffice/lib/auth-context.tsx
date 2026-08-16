@@ -19,7 +19,7 @@ import {
   loginApi,
   registerApi,
   decodeTokenPayload,
-  getCurrentUserApi,
+  getMyProfileApi,
 } from '../services/auth-api';
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -57,16 +57,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     setUser(minimalUser);
 
-    // Try to fetch the full user profile using the email as identifier.
-    // The backend uses numeric IDs, so we first need to look up the user.
-    // For now, we rely on the JWT payload and a lightweight fetch.
+    // Fetch the user's profile from /profiles/me (uses the JWT to identify the user)
     // If the token is expired the server will return 401 and we clean up.
-    getCurrentUserApi(0)
-      .then((fullUser) => {
-        setUser(fullUser);
+    getMyProfileApi()
+      .then((profile) => {
+        // Merge profile data into the user object
+        setUser((prev) => ({
+          ...(prev || minimalUser),
+          profile: {
+            name: profile.name,
+            phone: profile.phone,
+            address: profile.address,
+          },
+        }));
       })
       .catch(() => {
-        // Token expired or invalid — clean up
+        // Token expired or invalid — clean up and redirect to login
         removeStoredToken();
         setToken(null);
         setUser(null);
@@ -88,6 +94,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         is_active: true,
         created_at: '',
       });
+
+      // Fetch profile data after login
+      try {
+        const profile = await getMyProfileApi();
+        setUser((prev) => ({
+          ...(prev || { id: 0, email: payload.sub, role: payload.role, is_active: true, created_at: '' }),
+          profile: {
+            name: profile.name,
+            phone: profile.phone,
+            address: profile.address,
+          },
+        }));
+      } catch {
+        // Profile fetch failed, but login succeeded — user can still use the app
+      }
     }
   }, []);
 

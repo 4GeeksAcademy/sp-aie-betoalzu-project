@@ -11,7 +11,16 @@ La API ya exige un token JWT en las rutas protegidas. Esta tarea cubre el lado f
 
 # TAREA
 
-## Vistas de autenticación
-- `/login-formulario` de email y contraseña. Si tiene éxito: almacena el token en localStorage, redirige a la vista autenticada principal. Si falla: muestra un mensaje de error claro.
-- `/register-formulario` de registro. Si tiene éxito: llama a POST /users (incluye campos opcionales de perfil), luego a POST
-- `/auth/login` con las mismas credenciales, almacena el token y redirige. Si falla: muestra errores de validación a nivel de campo.
+## Vistas de gestión de cuenta
+- /account/profile muestra el email del usuario actual más los datos de perfil (name, phone, address) desde GET /auth/me. Permite editar nombre y contacto mediante PUT /profiles/me con el token en la cabecera.
+
+## Protección de rutas 
+- Identifica todas las vistas de tus aplicaciones Next.js (excluyendo el website público) que requieren sesión autenticada.
+- Implementa un mecanismo de protección en el cliente (layout guard o hook personalizado) que compruebe el token en localStorage y redirija a /login si está ausente o no es válido. No uses el middleware de Next.js para esto salvo que el token también esté en una cookie que el middleware pueda leer.
+- Asegúrate de que el website (`uis/website`) no se ve afectado - sin comprobación de token, sin redirección.
+
+## Ciclo de vida del token
+- En login y registro: almacena el token en localStorage
+- En cada llamada protegida a la API: lee el token y adjúntalo como Authorization: Bearer <token>
+- Al cerrar sesión: elimina el token de localStorage y redirige a /login.
+- Si una llamada protegida a la API devuelve 401: limpia el token y redirigea /login.
