@@ -1,4 +1,5 @@
 import { getCandidates } from '@/services/api';
+import type { Candidate } from '@/types/candidate';
 import CandidateTable from '@/components/CandidateTable';
 import CandidateFilters from '@/components/CandidateFilters';
 import Link from 'next/link';
@@ -14,7 +15,7 @@ type HomePageProps = {
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const resolvedSearchParams = await searchParams;
-  let candidates = [];
+  let candidates: Candidate[] = [];
   let loadError = '';
 
   try {

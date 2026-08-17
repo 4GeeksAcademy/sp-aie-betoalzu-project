@@ -12,6 +12,11 @@ const tools = [
     href: '/incident-analyzer',
   },
   {
+    name: 'Gestor Centralizado de Incidencias',
+    description: 'Registra, clasifica y da seguimiento a incidencias tecnicas, operativas y de clientes con dashboard ejecutivo.',
+    href: '/incidents',
+  },
+  {
     name: 'Gestion de Proveedores',
     description: 'Consulta, crea, actualiza y elimina proveedores con seguimiento de estado activo o suspendido.',
     href: '/suppliers',

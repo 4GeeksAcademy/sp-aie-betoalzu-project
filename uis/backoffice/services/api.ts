@@ -15,7 +15,7 @@ export type IncidentInvalidRules = {
   score_out_of_range: number;
 };
 
-export type IncidentSummary = {
+export type CsvIncidentSummary = {
   source_file: string;
   total_records: number;
   valid_records: number;
@@ -217,7 +217,7 @@ export async function analyzeIncidentsCsv(file: File) {
     body: form,
   });
 
-  return (await handleResponse(res)) as IncidentSummary;
+  return (await handleResponse(res)) as CsvIncidentSummary;
 }
 
 export async function exportIncidentResults() {
@@ -316,4 +316,94 @@ export async function deleteSupplier(id: number) {
   });
 
   await handleResponse(res);
+}
+
+// ===========================================================================
+// Incidents (Centralized Incident Manager)
+// ===========================================================================
+
+import type { Incident, IncidentInput, IncidentSummary } from '@/types/incident';
+
+function normalizeIncident(payload: Incident): Incident {
+  return {
+    ...payload,
+    description: payload.description || null,
+    reported_by: payload.reported_by || null,
+    assigned_to: payload.assigned_to || null,
+    ticket_id: payload.ticket_id || null,
+  };
+}
+
+export async function getIncidents(params?: { status?: string; category?: string; branch?: string; origin?: string }) {
+  const query = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([_, v]) => v))).toString() : '';
+  const res = await fetch(`/api/incidents${query}`, {
+    cache: 'no-store',
+    headers: authHeaders(),
+  });
+  const data = await handleResponse(res);
+  if (!Array.isArray(data)) return [];
+  return (data as Incident[]).map(normalizeIncident);
+}
+
+export async function getIncident(id: number) {
+  const res = await fetch(`/api/incidents/${id}`, {
+    cache: 'no-store',
+    headers: authHeaders(),
+  });
+  const data = await handleResponse(res);
+  return normalizeIncident(data as Incident);
+}
+
+export async function createIncident(data: IncidentInput) {
+  const res = await fetch('/api/incidents', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  const response = await handleResponse(res);
+  return normalizeIncident(response as Incident);
+}
+
+export async function updateIncident(id: number, data: Partial<IncidentInput>) {
+  const res = await fetch(`/api/incidents/${id}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+  const response = await handleResponse(res);
+  return normalizeIncident(response as Incident);
+}
+
+export async function updateIncidentStatus(id: number, status: Incident['status']) {
+  const res = await fetch(`/api/incidents/${id}/status`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  const response = await handleResponse(res);
+  return normalizeIncident(response as Incident);
+}
+
+export async function deleteIncident(id: number) {
+  const res = await fetch(`/api/incidents/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  await handleResponse(res);
+}
+
+export async function getIncidentsSummary() {
+  const res = await fetch('/api/incidents/summary', {
+    cache: 'no-store',
+    headers: authHeaders(),
+  });
+  return (await handleResponse(res)) as IncidentSummary;
+}
+
+export async function seedIncidentsFromCsv() {
+  const res = await fetch('/api/incidents/seed', {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  return handleResponse(res);
 }

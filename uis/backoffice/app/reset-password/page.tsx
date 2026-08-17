@@ -60,7 +60,7 @@ function ResetForm() {
     setSubmitting(true);
 
     try {
-      await resetPasswordApi(token, newPassword);
+      await resetPasswordApi(token!, newPassword);
       router.push('/login?reset=success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al restablecer la contrasena';
