@@ -14,6 +14,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     incident_analyzer_api = None
 
+from services.api.incidents.routes import incidents_api as centralized_incidents_api
 from services.api.suppliers.routes import suppliers_api
 from services.api.users.routes import users_api
 from services.api.profiles.routes import profiles_api
@@ -32,6 +33,7 @@ app.add_middleware(
 
 if incident_analyzer_api is not None:
     app.include_router(incident_analyzer_api)
+app.include_router(centralized_incidents_api)
 app.include_router(suppliers_api)
 app.include_router(users_api)
 app.include_router(profiles_api)

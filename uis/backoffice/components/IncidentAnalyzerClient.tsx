@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { analyzeIncidentsCsv, exportIncidentResults, IncidentSummary } from '@/services/api';
+import { analyzeIncidentsCsv, exportIncidentResults, CsvIncidentSummary } from '@/services/api';
 
 const INVALID_RULE_LABELS: Record<string, string> = {
   missing_client_company: 'Falta client_company',
@@ -32,7 +32,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 
 export default function IncidentAnalyzerClient() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [summary, setSummary] = useState<IncidentSummary | null>(null);
+  const [summary, setSummary] = useState<CsvIncidentSummary | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState('');
