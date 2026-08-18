@@ -71,8 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         }));
       })
-      .catch(() => {
+      .catch((err) => {
         // Token expired or invalid — clean up and redirect to login
+        console.warn("No se pudo obtener el perfil del usuario:", err);
         removeStoredToken();
         setToken(null);
         setUser(null);

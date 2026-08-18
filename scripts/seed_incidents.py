@@ -217,7 +217,11 @@ def main() -> int:
 
     # Verify counts
     from services.api.incidents.services import get_summary
-    summary = get_summary()
+    try:
+        summary = get_summary()
+    except Exception as exc:
+        print(f"ERROR: No se pudo obtener el resumen de incidencias: {exc}")
+        return 1
     print("  --- Summary ---")
     print(f"  Total in DB: {summary['total']}")
     print(f"  By status:   {summary['by_status']}")

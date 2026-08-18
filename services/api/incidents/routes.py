@@ -227,15 +227,18 @@ def list_all_incidents(
     current_user: UserInDB = Depends(get_current_user),
 ):
     """List incidents with optional filters."""
-    return [
-        inc.model_dump(mode="json")
-        for inc in list_incidents(
-            status=status,
-            category=category,
-            branch=branch,
-            origin=origin,
-        )
-    ]
+    try:
+        return [
+            inc.model_dump(mode="json")
+            for inc in list_incidents(
+                status=status,
+                category=category,
+                branch=branch,
+                origin=origin,
+            )
+        ]
+    except Exception:
+        return _json_error("Error al listar incidencias.", 500)
 
 
 @incidents_api.post("/api/incidents", status_code=201)
@@ -256,7 +259,10 @@ def incidents_summary(
     current_user: UserInDB = Depends(get_current_user),
 ):
     """Return aggregated summary statistics."""
-    return get_summary()
+    try:
+        return get_summary()
+    except Exception:
+        return _json_error("Error al obtener el resumen de incidencias.", 500)
 
 
 @incidents_api.post("/api/incidents/seed")
@@ -325,7 +331,10 @@ def delete_incident_by_id(
     current_user: UserInDB = Depends(get_current_user),
 ):
     """Delete an incident by ID."""
-    deleted = delete_incident(incident_id)
-    if not deleted:
-        return _json_error("Incidencia no encontrada.", 404)
-    return {"message": "Incidencia eliminada correctamente."}
+    try:
+        deleted = delete_incident(incident_id)
+        if not deleted:
+            return _json_error("Incidencia no encontrada.", 404)
+        return {"message": "Incidencia eliminada correctamente."}
+    except Exception:
+        return _json_error("Error al eliminar la incidencia.", 500)

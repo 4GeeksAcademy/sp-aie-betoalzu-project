@@ -88,6 +88,7 @@ function extractCandidateList(data: unknown): CandidateApi[] {
     if (Array.isArray(payload.data)) return payload.data as CandidateApi[];
   }
 
+  console.warn("extractCandidateList: formato de respuesta inesperado", data);
   return [];
 }
 
@@ -119,18 +120,23 @@ export async function getCandidates(params?: Record<string, string>) {
 
   while (all.length < total) {
     const query = new URLSearchParams({ page: String(page), limit: String(pageSize) }).toString();
-    const res = await fetch(`${getApiUrl()}/records?${query}`, {
-      cache: 'no-store',
-      headers: authHeaders(),
-    });
-    const data = await handleResponse(res);
-    const pageItems = extractCandidateList(data);
+    try {
+      const res = await fetch(`${getApiUrl()}/records?${query}`, {
+        cache: 'no-store',
+        headers: authHeaders(),
+      });
+      const data = await handleResponse(res);
+      const pageItems = extractCandidateList(data);
 
-    if (!pageItems.length) break;
+      if (!pageItems.length) break;
 
-    all.push(...pageItems);
-    total = extractTotalCount(data) ?? all.length;
-    page += 1;
+      all.push(...pageItems);
+      total = extractTotalCount(data) ?? all.length;
+      page += 1;
+    } catch (err) {
+      console.warn(`Error al obtener página ${page} de candidatos:`, err);
+      break;
+    }
 
     if (page > 50) break;
   }

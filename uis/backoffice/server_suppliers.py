@@ -6,6 +6,7 @@ El archivo scripts/suppliers_db.json tiene formato:
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -18,6 +19,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 
 _ROOT_DIR = Path(__file__).resolve().parents[2]
 _SUPPLIERS_DB_PATH = _ROOT_DIR / "scripts" / "suppliers_db.json"
+
+logger = logging.getLogger(__name__)
 
 
 # ── Enums ────────────────────────────────────────────────────────────────
@@ -121,7 +124,13 @@ def _read_dict() -> dict[str, dict[str, Any]]:
     """Retorna {id_str: data_dict} desde el archivo JSON."""
     try:
         raw = json.loads(_SUPPLIERS_DB_PATH.read_bytes())
-    except Exception:
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as exc:
+        logger.warning("Error al decodificar JSON de proveedores: %s", exc)
+        return {}
+    except OSError as exc:
+        logger.warning("Error de E/S al leer proveedores: %s", exc)
         return {}
     suppliers = raw.get("suppliers", {})
     return suppliers if isinstance(suppliers, dict) else {}
