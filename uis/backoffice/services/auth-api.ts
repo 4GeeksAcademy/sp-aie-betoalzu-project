@@ -28,7 +28,9 @@ async function handleResponse<T>(res: Response): Promise<T> {
     const message =
       typeof payload === 'string'
         ? payload
-        : payload?.detail || payload?.message || payload?.error || 'Error en la petición';
+        : Array.isArray(payload?.detail)
+          ? payload.detail[0]?.msg || payload.detail[0]?.message || 'Error en la petición'
+          : payload?.detail || payload?.message || payload?.error || 'Error en la petición';
     throw new Error(message);
   }
 
