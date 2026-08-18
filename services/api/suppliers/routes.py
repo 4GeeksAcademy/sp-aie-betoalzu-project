@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from tinydb import TinyDB
 
 from services.api.suppliers import Country, Supplier, SupplierCategory, SupplierCreate, SupplierStatus, SupplierUpdate
@@ -32,7 +32,10 @@ def _json_error(message: str, status_code: int):
 
 def _serialize_supplier(document) -> dict:
     supplier_payload = dict(document)
-    validated = Supplier.model_validate(supplier_payload)
+    try:
+        validated = Supplier.model_validate(supplier_payload)
+    except ValidationError:
+        raise HTTPException(status_code=500, detail="Error interno al procesar el proveedor.")
     serialized = validated.model_dump(mode="json")
     serialized["id"] = document.doc_id
     return serialized

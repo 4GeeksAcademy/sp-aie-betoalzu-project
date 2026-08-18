@@ -95,12 +95,6 @@ export default function IncidentsManagerClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterStatus, filterCategory]);
 
-  // Reload when filters change
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const sortedIncidents = useMemo(
     () =>
       [...incidents].sort((a, b) => {
@@ -231,9 +225,17 @@ export default function IncidentsManagerClient() {
   return (
     <section className="space-y-6">
       {error && (
-        <div className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-          <p className="font-semibold">Error</p>
-          <p className="mt-1">{error}</p>
+        <div className="flex items-center justify-between rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <div>
+            <p className="font-semibold">Error</p>
+            <p className="mt-1">{error}</p>
+          </div>
+          <button
+            onClick={loadData}
+            className="ml-4 shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+          >
+            Reintentar
+          </button>
         </div>
       )}
 

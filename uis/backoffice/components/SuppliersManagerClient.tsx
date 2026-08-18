@@ -68,8 +68,16 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
   );
 
   async function loadSuppliers() {
-    const data = await getSuppliers();
-    setSuppliers(data);
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getSuppliers();
+      setSuppliers(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar proveedores.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function resetForm() {
@@ -176,9 +184,17 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
   return (
     <section className="space-y-6">
       {error && (
-        <div className="rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-          <p className="font-semibold">Error de conexion o API</p>
-          <p className="mt-1">{error}</p>
+        <div className="flex items-center justify-between rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+          <div>
+            <p className="font-semibold">Error de conexion o API</p>
+            <p className="mt-1">{error}</p>
+          </div>
+          <button
+            onClick={loadSuppliers}
+            className="ml-4 shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+          >
+            Reintentar
+          </button>
         </div>
       )}
 

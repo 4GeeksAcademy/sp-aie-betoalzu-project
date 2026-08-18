@@ -103,8 +103,11 @@ def get_incident(incident_id: int) -> IncidentOut | None:
 
 def _get_raw(incident_id: int):
     """Internal helper: return the raw TinyDB document."""
-    _, table = _open_incidents_table()
-    return table.get(doc_id=incident_id)
+    db, table = _open_incidents_table()
+    try:
+        return table.get(doc_id=incident_id)
+    finally:
+        db.close()
 
 
 def list_incidents(

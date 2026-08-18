@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -87,6 +88,8 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@nexova.com")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+logger = logging.getLogger(__name__)
+
 
 def _send_reset_email(to_email: str, token: str) -> None:
     """Send a password-reset email via the Resend API.
@@ -153,7 +156,7 @@ Si no solicitaste este cambio, puedes ignorar este correo. El enlace expira en {
             timeout=15,
         )
     except Exception as exc:
-        print(f"[WARN] Failed to send reset email to {to_email}: {exc}")
+        logger.warning("Failed to send reset email to %s: %s", to_email, exc)
 
 
 @users_api.post("/auth/forgot-password")
