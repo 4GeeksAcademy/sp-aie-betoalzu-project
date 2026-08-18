@@ -10,14 +10,22 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
     "bcrypt>=4.0.0",
+    "fastapi",
+    "pydantic[email]",
 ]
 
 [project.scripts]
 seed = "scripts.seed:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["scripts*"]
+include = ["scripts*", "services*"]
