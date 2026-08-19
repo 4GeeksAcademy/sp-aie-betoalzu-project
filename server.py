@@ -7,7 +7,10 @@ except ImportError:
     print("You don't have FastAPI installed, run `$ pip3 install fastapi uvicorn` and try again")
     exit(1)
 
-import os, subprocess
+import os
+import subprocess
+from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
 
 try:
     from services.api.incident_analyzer.routes import incidents_api as incident_analyzer_api
@@ -18,9 +21,19 @@ from services.api.incidents.routes import incidents_api as centralized_incidents
 from services.api.suppliers.routes import suppliers_api
 from services.api.users.routes import users_api
 from services.api.profiles.routes import profiles_api
+from services.api.inventory.routes import inventory_api
+from services.database import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan: runs startup tasks before yielding, shutdown after."""
+    init_db()  # Create SQLModel tables on Supabase/PostgreSQL
+    yield
+
 
 static_file_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), './')
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 # CORS — allow the Next.js dev server and any local origin during development
 app.add_middleware(
@@ -37,6 +50,7 @@ app.include_router(centralized_incidents_api)
 app.include_router(suppliers_api)
 app.include_router(users_api)
 app.include_router(profiles_api)
+app.include_router(inventory_api)
 
 # Serving the index file
 @app.get('/')
