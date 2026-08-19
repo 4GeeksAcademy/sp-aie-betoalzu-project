@@ -6,3 +6,13 @@ Requires-Python: >=3.11
 Requires-Dist: passlib[bcrypt]>=1.7.4
 Requires-Dist: python-jose[cryptography]>=3.5.0
 Requires-Dist: tinydb>=4.8.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: bcrypt>=4.0.0
+Requires-Dist: fastapi
+Requires-Dist: pydantic[email]
+Requires-Dist: sqlmodel>=0.0.39
+Requires-Dist: psycopg2-binary>=2.9.12
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0; extra == "dev"
