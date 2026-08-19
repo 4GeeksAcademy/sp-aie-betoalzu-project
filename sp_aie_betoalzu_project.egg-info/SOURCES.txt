@@ -4,6 +4,10 @@ scripts/__init__.py
 scripts/analyze.py
 scripts/seed.py
 scripts/seed_incidents.py
+scripts/seed_inventory.py
+services/database.py
+services/models.py
+services/schemas.py
 services/api/__init__.py
 services/api/routes.py
 services/api/incident_analyzer/__init__.py
@@ -13,6 +17,10 @@ services/api/incidents/__init__.py
 services/api/incidents/models.py
 services/api/incidents/routes.py
 services/api/incidents/services.py
+services/api/inventory/__init__.py
+services/api/inventory/models.py
+services/api/inventory/routes.py
+services/api/inventory/services.py
 services/api/profiles/__init__.py
 services/api/profiles/models.py
 services/api/profiles/routes.py
