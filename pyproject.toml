@@ -1,0 +1,33 @@
+[project]
+name = "sp-aie-betoalzu-project"
+version = "0.1.0"
+description = "Utility scripts for Nexova project"
+requires-python = ">=3.11"
+dependencies = [
+    "passlib[bcrypt]>=1.7.4",
+    "python-jose[cryptography]>=3.5.0",
+    "tinydb>=4.8.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+    "bcrypt>=4.0.0",
+    "fastapi",
+    "pydantic[email]",
+    "sqlmodel>=0.0.39",
+    "psycopg2-binary>=2.9.12",
+]
+
+[project.scripts]
+seed = "scripts.seed:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["scripts*", "services*"]
