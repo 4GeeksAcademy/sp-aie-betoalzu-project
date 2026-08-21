@@ -1,0 +1,55 @@
+# ──────────────────────────────────────────────────────────────────
+# docker-compose.yml
+# Basado en la especificación: specs/dockerizacion-prompt.md
+# ──────────────────────────────────────────────────────────────────
+
+# version: "3.9"
+
+services:
+
+  # ── Backend (FastAPI + Python) ──────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+    container_name: nexova-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind mount del código fuente para hot-reload
+      - ./server.py:/app/server.py
+      - ./services/:/app/services/
+      - ./data/:/app/data/
+    env_file:
+      - .env
+    networks:
+      - nexova-network
+    command: >
+      sh -c "uvicorn server:app --host 0.0.0.0 --port 8000 --reload"
+
+  # ── Interfaces (Next.js: backoffice + website) ─────────────────
+  interfaces:
+    build:
+      context: ./uis
+      dockerfile: Dockerfile
+    container_name: nexova-interfaces
+    ports:
+      - "3000:3000"   # Website
+      - "3001:3001"   # Backoffice
+    volumes:
+      # Bind mount del código fuente para hot-reload
+      - ./uis/backoffice/:/app/backoffice/
+      - ./uis/website/:/app/website/
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    networks:
+      - nexova-network
+    command: >
+      sh -c "/start.sh"
+
+networks:
+  nexova-network:
+    name: nexova-network
+    driver: bridge

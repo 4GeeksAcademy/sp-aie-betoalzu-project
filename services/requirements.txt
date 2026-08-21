@@ -1,0 +1,15 @@
+# ──────────────────────────────────────────────────────────────────
+# requirements.txt — Dependencias del backend
+# Generado a partir de pyproject.toml para Docker
+# ──────────────────────────────────────────────────────────────────
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.5.0
+tinydb>=4.8.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+bcrypt>=4.0.0
+fastapi
+pydantic[email]
+sqlmodel>=0.0.39
+psycopg2-binary>=2.9.12
+uvicorn
