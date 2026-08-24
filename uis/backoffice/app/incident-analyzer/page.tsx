@@ -1,4 +1,9 @@
-import IncidentAnalyzerClient from '@/components/IncidentAnalyzerClient';
+import dynamic from 'next/dynamic';
+
+const IncidentAnalyzerClient = dynamic(
+  () => import('@/components/IncidentAnalyzerClient'),
+  { loading: () => <p className="text-sm text-slate-500">Cargando analizador de incidentes...</p> },
+);
 
 export default function IncidentAnalyzerPage() {
   return (

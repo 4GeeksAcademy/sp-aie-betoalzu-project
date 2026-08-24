@@ -1,4 +1,9 @@
-import IncidentsManagerClient from '@/components/IncidentsManagerClient';
+import dynamic from 'next/dynamic';
+
+const IncidentsManagerClient = dynamic(
+  () => import('@/components/IncidentsManagerClient'),
+  { loading: () => <p className="text-sm text-slate-500">Cargando gestor de incidencias...</p> },
+);
 
 export default function IncidentsPage() {
   return (

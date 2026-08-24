@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   INCIDENT_STATUSES,
   INCIDENT_CATEGORIES,
@@ -25,6 +25,7 @@ import {
   getIncidentsSummary,
   seedIncidentsFromCsv,
 } from '@/services/api';
+import { useCrudForm } from '@/hooks/useCrudForm';
 
 const INITIAL_FORM: IncidentInput = {
   title: '',
@@ -57,22 +58,50 @@ function statusBadgeClass(status: string) {
   return STATUS_BADGE[status] || 'border-slate-300 bg-slate-50 text-slate-600';
 }
 
+function preparePayload(form: IncidentInput): IncidentInput {
+  return {
+    ...form,
+    title: form.title.trim(),
+    description: form.description?.trim() || null,
+    reported_by: form.reported_by?.trim() || null,
+    assigned_to: form.assigned_to?.trim() || null,
+  };
+}
+
 export default function IncidentsManagerClient() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [summary, setSummary] = useState<IncidentSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [formError, setFormError] = useState('');
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState<IncidentInput>(INITIAL_FORM);
+  const [pageError, setPageError] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [seedMessage, setSeedMessage] = useState('');
 
+  const crud = useCrudForm<IncidentInput, Incident>({
+    initialForm: INITIAL_FORM,
+    createFn: (data) => createIncident(preparePayload(data)),
+    updateFn: (id, data) => updateIncident(id, preparePayload(data)),
+    deleteFn: deleteIncident,
+    loadData,
+    validateForm: (form) => {
+      if (!form.title.trim()) return 'El título es obligatorio.';
+      return '';
+    },
+    mapEntityToForm: (incident) => ({
+      title: incident.title,
+      description: incident.description || '',
+      category: incident.category as IncidentInput['category'],
+      origin: incident.origin as IncidentInput['origin'],
+      branch: incident.branch as IncidentInput['branch'],
+      reported_by: incident.reported_by || '',
+      assigned_to: incident.assigned_to || '',
+    }),
+    entityName: 'incidencia',
+  });
+
   async function loadData() {
     setLoading(true);
-    setError('');
+    setPageError('');
     try {
       const [incidentsData, summaryData] = await Promise.all([
         getIncidents({
@@ -84,7 +113,7 @@ export default function IncidentsManagerClient() {
       setIncidents(incidentsData);
       setSummary(summaryData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar incidencias.');
+      setPageError(err instanceof Error ? err.message : 'Error al cargar incidencias.');
     } finally {
       setLoading(false);
     }
@@ -107,76 +136,33 @@ export default function IncidentsManagerClient() {
     [incidents],
   );
 
-  function resetForm() {
-    setEditingId(null);
-    setForm(INITIAL_FORM);
-    setFormError('');
-  }
-
-  function onEdit(incident: Incident) {
-    setEditingId(incident.id);
-    setFormError('');
-    setForm({
-      title: incident.title,
-      description: incident.description || '',
-      category: incident.category as IncidentInput['category'],
-      origin: incident.origin as IncidentInput['origin'],
-      branch: incident.branch as IncidentInput['branch'],
-      reported_by: incident.reported_by || '',
-      assigned_to: incident.assigned_to || '',
+  function handleDelete(incident: Incident) {
+    crud.onDelete(incident, () => {
+      setIncidents((prev) => prev.filter((i) => i.id !== incident.id));
     });
   }
 
-  function validateForm() {
-    if (!form.title.trim()) return 'El titulo es obligatorio.';
-    return '';
-  }
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError('');
-    setError('');
-
-    const validationError = validateForm();
-    if (validationError) {
-      setFormError(validationError);
-      return;
-    }
-
-    setSubmitting(true);
+  async function onTransition(incident: Incident, nextStatus: string) {
+    setPageError('');
     try {
-      const payload: IncidentInput = {
-        ...form,
-        title: form.title.trim(),
-        description: form.description?.trim() || null,
-        reported_by: form.reported_by?.trim() || null,
-        assigned_to: form.assigned_to?.trim() || null,
-      };
-
-      if (editingId) {
-        await updateIncident(editingId, payload);
-      } else {
-        await createIncident(payload);
-      }
-
-      resetForm();
+      const updated = await updateIncidentStatus(incident.id, nextStatus as Incident['status']);
+      setIncidents((prev) => prev.map((i) => (i.id === incident.id ? updated : i)));
       await loadData();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Error al guardar la incidencia.');
-    } finally {
-      setSubmitting(false);
+      setPageError(err instanceof Error ? err.message : 'Error al cambiar estado.');
     }
   }
 
-  async function onDelete(incident: Incident) {
-    if (!window.confirm(`Eliminar incidencia #${incident.id}: "${incident.title}"?`)) return;
-    setError('');
+  async function handleSeed() {
+    if (!window.confirm('¿Cargar datos históricos desde incidents-nexova.csv? Se eliminarán los datos actuales primero.')) return;
+    setSeedMessage('');
+    setPageError('');
     try {
-      await deleteIncident(incident.id);
-      setIncidents((prev) => prev.filter((i) => i.id !== incident.id));
-      if (editingId === incident.id) resetForm();
+      const result = await seedIncidentsFromCsv();
+      setSeedMessage(`Seed completado: ${result.inserted} incidencias insertadas.`);
+      await loadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al eliminar.');
+      setPageError(err instanceof Error ? err.message : 'Error en seed.');
     }
   }
 
@@ -224,11 +210,11 @@ export default function IncidentsManagerClient() {
 
   return (
     <section className="space-y-6">
-      {error && (
+      {(pageError || crud.error) && (
         <div className="flex items-center justify-between rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
           <div>
             <p className="font-semibold">Error</p>
-            <p className="mt-1">{error}</p>
+            <p className="mt-1">{pageError || crud.error}</p>
           </div>
           <button
             onClick={loadData}
@@ -295,24 +281,24 @@ export default function IncidentsManagerClient() {
         {/* Form */}
         <article className="surface-card h-fit p-6">
           <h2 className="text-xl font-bold text-slate-900">
-            {editingId ? 'Editar incidencia' : 'Nueva incidencia'}
+            {crud.editingId ? 'Editar incidencia' : 'Nueva incidencia'}
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            {editingId ? 'Actualiza los campos necesarios.' : 'Registra una nueva incidencia en el sistema.'}
+            {crud.editingId ? 'Actualiza los campos necesarios.' : 'Registra una nueva incidencia en el sistema.'}
           </p>
 
-          {formError && (
+          {crud.formError && (
             <div className="mt-3 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-              {formError}
+              {crud.formError}
             </div>
           )}
 
-          <form className="mt-5 space-y-4" onSubmit={onSubmit}>
+          <form className="mt-5 space-y-4" onSubmit={crud.onSubmit}>
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Título *</span>
               <input
-                value={form.title}
-                onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                value={crud.form.title}
+                onChange={(e) => crud.setForm((prev) => ({ ...prev, title: e.target.value }))}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 placeholder="Ej: Error en sincronización de ATS"
                 required
@@ -323,8 +309,8 @@ export default function IncidentsManagerClient() {
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Descripción</span>
               <textarea
-                value={form.description || ''}
-                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                value={crud.form.description || ''}
+                onChange={(e) => crud.setForm((prev) => ({ ...prev, description: e.target.value }))}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 rows={3}
                 placeholder="Describe el problema con detalle..."
@@ -335,8 +321,8 @@ export default function IncidentsManagerClient() {
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">Categoría</span>
                 <select
-                  value={form.category}
-                  onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value as IncidentInput['category'] }))}
+                  value={crud.form.category}
+                  onChange={(e) => crud.setForm((prev) => ({ ...prev, category: e.target.value as IncidentInput['category'] }))}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 >
                   {INCIDENT_CATEGORIES.map((c) => (
@@ -348,8 +334,8 @@ export default function IncidentsManagerClient() {
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">Origen</span>
                 <select
-                  value={form.origin}
-                  onChange={(e) => setForm((prev) => ({ ...prev, origin: e.target.value as IncidentInput['origin'] }))}
+                  value={crud.form.origin}
+                  onChange={(e) => crud.setForm((prev) => ({ ...prev, origin: e.target.value as IncidentInput['origin'] }))}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 >
                   {INCIDENT_ORIGINS.map((o) => (
@@ -362,8 +348,8 @@ export default function IncidentsManagerClient() {
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Oficina / Sede</span>
               <select
-                value={form.branch}
-                onChange={(e) => setForm((prev) => ({ ...prev, branch: e.target.value as IncidentInput['branch'] }))}
+                value={crud.form.branch}
+                onChange={(e) => crud.setForm((prev) => ({ ...prev, branch: e.target.value as IncidentInput['branch'] }))}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
               >
                 {INCIDENT_BRANCHES.map((b) => (
@@ -376,8 +362,8 @@ export default function IncidentsManagerClient() {
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">Reportado por</span>
                 <input
-                  value={form.reported_by || ''}
-                  onChange={(e) => setForm((prev) => ({ ...prev, reported_by: e.target.value }))}
+                  value={crud.form.reported_by || ''}
+                  onChange={(e) => crud.setForm((prev) => ({ ...prev, reported_by: e.target.value }))}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                   placeholder="Nombre o email"
                 />
@@ -386,8 +372,8 @@ export default function IncidentsManagerClient() {
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">Asignado a</span>
                 <input
-                  value={form.assigned_to || ''}
-                  onChange={(e) => setForm((prev) => ({ ...prev, assigned_to: e.target.value }))}
+                  value={crud.form.assigned_to || ''}
+                  onChange={(e) => crud.setForm((prev) => ({ ...prev, assigned_to: e.target.value }))}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                   placeholder="Nombre o equipo"
                 />
@@ -395,11 +381,11 @@ export default function IncidentsManagerClient() {
             </div>
 
             <div className="flex gap-2">
-              <button type="submit" disabled={submitting} className="btn-primary flex-1">
-                {submitting ? 'Guardando...' : editingId ? 'Actualizar' : 'Crear incidencia'}
+              <button type="submit" disabled={crud.submitting} className="btn-primary flex-1">
+                {crud.submitting ? 'Guardando...' : crud.editingId ? 'Actualizar' : 'Crear incidencia'}
               </button>
-              {editingId && (
-                <button type="button" onClick={resetForm} className="btn-secondary">
+              {crud.editingId && (
+                <button type="button" onClick={crud.resetForm} className="btn-secondary">
                   Cancelar
                 </button>
               )}
@@ -441,7 +427,7 @@ export default function IncidentsManagerClient() {
                       <td className="py-3 pr-4 font-mono text-xs text-slate-500">#{inc.id}</td>
                       <td className="py-3 pr-4">
                         <button
-                          onClick={() => onEdit(inc)}
+                          onClick={() => crud.onEdit(inc)}
                           className="text-left font-medium text-slate-900 hover:text-brand"
                           title="Editar"
                         >
@@ -478,7 +464,7 @@ export default function IncidentsManagerClient() {
                             </button>
                           ))}
                           <button
-                            onClick={() => onDelete(inc)}
+                            onClick={() => handleDelete(inc)}
                             className="rounded-lg border border-transparent px-2 py-1 text-xs font-medium text-rose-500 transition-colors hover:bg-rose-50"
                             title="Eliminar"
                           >
