@@ -1,22 +1,27 @@
 #!/bin/sh
 # ──────────────────────────────────────────────────────────────────
-# start.sh — Arranca ambas aplicaciones (backoffice + website)
+# start.sh — Arranca ambas aplicaciones en modo producción
+# backoffice (Next.js build) + website (estático con Tailwind compilado)
 # ──────────────────────────────────────────────────────────────────
 set -e
 
-echo "=== Iniciando backoffice (Next.js) en el puerto 3001 ==="
+echo "=== Construyendo backoffice (Next.js) ==="
 cd /app/backoffice
-npm run dev -- -p 3001 &
+npm run build
+
+echo "=== Iniciando backoffice (Next.js producción) en el puerto 3001 ==="
+npm start -- -p 3001 &
 BACKOFFICE_PID=$!
 
-echo "=== Iniciando website (Next.js / estático) en el puerto 3000 ==="
+echo "=== Construyendo CSS del website (Tailwind) ==="
 cd /app/website
-# Si website tiene package.json con Next.js, usamos dev; si no, servimos estático
 if [ -f "package.json" ]; then
-  npm run dev -- -p 3000 &
-else
-  npx serve -p 3000 . &
+  npm install --silent
+  npm run build:css
 fi
+
+echo "=== Sirviendo website estático en el puerto 3000 ==="
+npx serve -p 3000 ./ &
 WEBSITE_PID=$!
 
 # Capturar señales para parar ambos procesos

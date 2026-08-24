@@ -1,5 +1,10 @@
-import SuppliersManagerClient from '@/components/SuppliersManagerClient';
+import dynamic from 'next/dynamic';
 import { Supplier } from '@/types/supplier';
+
+const SuppliersManagerClient = dynamic(
+  () => import('@/components/SuppliersManagerClient'),
+  { loading: () => <p className="text-sm text-slate-500">Cargando gestor de proveedores...</p> },
+);
 
 async function loadInitialSuppliers(): Promise<{ suppliers: Supplier[]; error: string }> {
   const apiUrl = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(/\/$/, '');

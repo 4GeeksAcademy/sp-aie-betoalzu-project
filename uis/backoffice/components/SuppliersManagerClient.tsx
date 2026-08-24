@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   SUPPLIER_CATEGORIES,
   SUPPLIER_CATEGORY_LABELS,
@@ -13,6 +13,7 @@ import {
   SupplierStatus,
 } from '@/types/supplier';
 import { createSupplier, deleteSupplier, getSuppliers, updateSupplier, updateSupplierStatus } from '@/services/api';
+import { useCrudForm } from '@/hooks/useCrudForm';
 
 const INITIAL_FORM: SupplierInput = {
   name: '',
@@ -44,6 +45,15 @@ function statusBadgeClass(status: SupplierStatus) {
   return 'border-rose-300 bg-rose-50 text-rose-800';
 }
 
+function preparePayload(form: SupplierInput): SupplierInput {
+  return {
+    ...form,
+    name: form.name.trim(),
+    contact_email: form.contact_email?.trim() || null,
+    notes: form.notes?.trim() || null,
+  };
+}
+
 type SuppliersManagerClientProps = {
   initialSuppliers: Supplier[];
   initialError?: string;
@@ -52,11 +62,39 @@ type SuppliersManagerClientProps = {
 export default function SuppliersManagerClient({ initialSuppliers, initialError = '' }: SuppliersManagerClientProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>(initialSuppliers);
   const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [error, setError] = useState(initialError);
-  const [formError, setFormError] = useState('');
-  const [form, setForm] = useState<SupplierInput>(INITIAL_FORM);
+  const [pageError, setPageError] = useState(initialError);
+
+  const crud = useCrudForm<SupplierInput, Supplier>({
+    initialForm: INITIAL_FORM,
+    createFn: (data) => createSupplier(preparePayload(data)),
+    updateFn: (id, data) => updateSupplier(id, preparePayload(data)),
+    deleteFn: deleteSupplier,
+    loadData: loadSuppliers,
+    validateForm: (form) => {
+      if (!form.name.trim()) return 'El nombre es obligatorio.';
+      if (form.categories.length === 0) return 'Debes seleccionar al menos una categoría.';
+      if (!Number.isFinite(form.monthly_rate) || form.monthly_rate <= 0) {
+        return 'La tarifa mensual debe ser mayor que 0.';
+      }
+      const expectedCurrency = toCurrencyByCountry(form.country);
+      if (form.currency !== expectedCurrency) {
+        return `La moneda para ${SUPPLIER_COUNTRY_LABELS[form.country]} debe ser ${expectedCurrency}.`;
+      }
+      return '';
+    },
+    mapEntityToForm: (supplier) => ({
+      name: supplier.name,
+      country: supplier.country,
+      categories: supplier.categories,
+      monthly_rate: supplier.monthly_rate,
+      currency: supplier.currency,
+      status: supplier.status,
+      contract_renewal_date: supplier.contract_renewal_date,
+      contact_email: supplier.contact_email,
+      notes: supplier.notes,
+    }),
+    entityName: 'proveedor',
+  });
 
   const sortedSuppliers = useMemo(
     () =>
@@ -69,125 +107,42 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
 
   async function loadSuppliers() {
     setLoading(true);
-    setError('');
+    setPageError('');
     try {
       const data = await getSuppliers();
       setSuppliers(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar proveedores.');
+      setPageError(err instanceof Error ? err.message : 'Error al cargar proveedores.');
     } finally {
       setLoading(false);
     }
   }
 
-  function resetForm() {
-    setEditingId(null);
-    setForm(INITIAL_FORM);
-    setFormError('');
-  }
-
-  function onEditSupplier(supplier: Supplier) {
-    setEditingId(supplier.id);
-    setFormError('');
-    setForm({
-      name: supplier.name,
-      country: supplier.country,
-      categories: supplier.categories,
-      monthly_rate: supplier.monthly_rate,
-      currency: supplier.currency,
-      status: supplier.status,
-      contract_renewal_date: supplier.contract_renewal_date,
-      contact_email: supplier.contact_email,
-      notes: supplier.notes,
-    });
-  }
-
-  function validateForm() {
-    if (!form.name.trim()) return 'El nombre es obligatorio.';
-    if (form.categories.length === 0) return 'Debes seleccionar al menos una categoria.';
-    if (!Number.isFinite(form.monthly_rate) || form.monthly_rate <= 0) {
-      return 'La tarifa mensual debe ser mayor que 0.';
-    }
-    const expectedCurrency = toCurrencyByCountry(form.country);
-    if (form.currency !== expectedCurrency) {
-      return `La moneda para ${SUPPLIER_COUNTRY_LABELS[form.country]} debe ser ${expectedCurrency}.`;
-    }
-    return '';
-  }
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError('');
-    setError('');
-
-    const validationError = validateForm();
-    if (validationError) {
-      setFormError(validationError);
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const payload: SupplierInput = {
-        ...form,
-        name: form.name.trim(),
-        contact_email: form.contact_email?.trim() || null,
-        notes: form.notes?.trim() || null,
-      };
-
-      if (editingId) {
-        await updateSupplier(editingId, payload);
-      } else {
-        await createSupplier(payload);
-      }
-
-      setError('');
-      setLoading(true);
-      await loadSuppliers();
-      resetForm();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'No fue posible guardar el proveedor.');
-    } finally {
-      setLoading(false);
-      setSubmitting(false);
-    }
-  }
-
-  async function onDeleteSupplier(supplier: Supplier) {
-    const shouldDelete = window.confirm(`Vas a eliminar a ${supplier.name}. Esta accion no se puede deshacer.`);
-    if (!shouldDelete) return;
-
-    setError('');
-    try {
-      await deleteSupplier(supplier.id);
+  function handleDelete(supplier: Supplier) {
+    crud.onDelete(supplier, () => {
       setSuppliers((current) => current.filter((item) => item.id !== supplier.id));
-      if (editingId === supplier.id) {
-        resetForm();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No fue posible eliminar el proveedor.');
-    }
+    });
   }
 
   async function onToggleStatus(supplier: Supplier) {
     const nextStatus: SupplierStatus = supplier.status === 'active' ? 'suspended' : 'active';
-    setError('');
+    setPageError('');
 
     try {
       const updated = await updateSupplierStatus(supplier.id, nextStatus);
       setSuppliers((current) => current.map((item) => (item.id === supplier.id ? updated : item)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No fue posible actualizar el estado.');
+      setPageError(err instanceof Error ? err.message : 'No fue posible actualizar el estado.');
     }
   }
 
   return (
     <section className="space-y-6">
-      {error && (
+      {(pageError || crud.error) && (
         <div className="flex items-center justify-between rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
           <div>
             <p className="font-semibold">Error de conexion o API</p>
-            <p className="mt-1">{error}</p>
+            <p className="mt-1">{pageError || crud.error}</p>
           </div>
           <button
             onClick={loadSuppliers}
@@ -200,15 +155,15 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
 
       <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
         <article className="surface-card p-6">
-          <h2 className="text-xl font-bold text-slate-900">{editingId ? 'Editar proveedor' : 'Nuevo proveedor'}</h2>
+          <h2 className="text-xl font-bold text-slate-900">{crud.editingId ? 'Editar proveedor' : 'Nuevo proveedor'}</h2>
           <p className="mt-1 text-sm text-slate-600">Completa los campos para crear o actualizar el registro.</p>
 
-          <form className="mt-5 space-y-4" onSubmit={onSubmit}>
+          <form className="mt-5 space-y-4" onSubmit={crud.onSubmit}>
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Nombre</span>
               <input
-                value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                value={crud.form.name}
+                onChange={(event) => crud.setForm((current) => ({ ...current, name: event.target.value }))}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 placeholder="Ej: LinkedIn Talent Solutions"
                 required
@@ -218,10 +173,10 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Pais</span>
               <select
-                value={form.country}
+                value={crud.form.country}
                 onChange={(event) => {
                   const country = event.target.value as SupplierInput['country'];
-                  setForm((current) => ({ ...current, country, currency: toCurrencyByCountry(country) }));
+                  crud.setForm((current) => ({ ...current, country, currency: toCurrencyByCountry(country) }));
                 }}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
               >
@@ -237,10 +192,10 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
               <span className="mb-1 block text-sm font-semibold text-slate-700">Categoria(s)</span>
               <select
                 multiple
-                value={form.categories}
+                value={crud.form.categories}
                 onChange={(event) => {
                   const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
-                  setForm((current) => ({ ...current, categories: selected as SupplierInput['categories'] }));
+                  crud.setForm((current) => ({ ...current, categories: selected as SupplierInput['categories'] }));
                 }}
                 className="h-36 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
               >
@@ -259,10 +214,10 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
                   type="number"
                   min="1"
                   step="0.01"
-                  value={form.monthly_rate || ''}
+                  value={crud.form.monthly_rate || ''}
                   onChange={(event) => {
                     const amount = Number(event.target.value);
-                    setForm((current) => ({ ...current, monthly_rate: Number.isFinite(amount) ? amount : 0 }));
+                    crud.setForm((current) => ({ ...current, monthly_rate: Number.isFinite(amount) ? amount : 0 }));
                   }}
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                   required
@@ -272,9 +227,9 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">Moneda</span>
                 <select
-                  value={form.currency}
+                  value={crud.form.currency}
                   onChange={(event) =>
-                    setForm((current) => ({ ...current, currency: event.target.value as SupplierInput['currency'] }))
+                    crud.setForm((current) => ({ ...current, currency: event.target.value as SupplierInput['currency'] }))
                   }
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 >
@@ -287,9 +242,9 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Estado</span>
               <select
-                value={form.status}
+                value={crud.form.status}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, status: event.target.value as SupplierInput['status'] }))
+                  crud.setForm((current) => ({ ...current, status: event.target.value as SupplierInput['status'] }))
                 }
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
               >
@@ -305,9 +260,9 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
               <span className="mb-1 block text-sm font-semibold text-slate-700">Renovacion de contrato</span>
               <input
                 type="date"
-                value={form.contract_renewal_date || ''}
+                value={crud.form.contract_renewal_date || ''}
                 onChange={(event) =>
-                  setForm((current) => ({
+                  crud.setForm((current) => ({
                     ...current,
                     contract_renewal_date: event.target.value ? event.target.value : null,
                   }))
@@ -320,9 +275,9 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
               <span className="mb-1 block text-sm font-semibold text-slate-700">Email de contacto</span>
               <input
                 type="email"
-                value={form.contact_email || ''}
+                value={crud.form.contact_email || ''}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, contact_email: event.target.value || null }))
+                  crud.setForm((current) => ({ ...current, contact_email: event.target.value || null }))
                 }
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 placeholder="compras@proveedor.com"
@@ -332,31 +287,31 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Notas</span>
               <textarea
-                value={form.notes || ''}
-                onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value || null }))}
+                value={crud.form.notes || ''}
+                onChange={(event) => crud.setForm((current) => ({ ...current, notes: event.target.value || null }))}
                 rows={3}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 placeholder="Contexto comercial o detalles operativos"
               />
             </label>
 
-            {formError && (
-              <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900">{formError}</div>
+            {crud.formError && (
+              <div className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-900">{crud.formError}</div>
             )}
 
             <div className="flex flex-wrap gap-3">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={crud.submitting}
                 className="inline-flex items-center justify-center rounded-full bg-brand px-5 py-2 text-sm font-bold text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {submitting ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Crear proveedor'}
+                {crud.submitting ? 'Guardando...' : crud.editingId ? 'Guardar cambios' : 'Crear proveedor'}
               </button>
 
-              {editingId && (
+              {crud.editingId && (
                 <button
                   type="button"
-                  onClick={resetForm}
+                  onClick={crud.resetForm}
                   className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
                 >
                   Cancelar edicion
@@ -431,14 +386,14 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => onEditSupplier(supplier)}
+                            onClick={() => crud.onEdit(supplier)}
                             className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                           >
                             Editar
                           </button>
                           <button
                             type="button"
-                            onClick={() => onDeleteSupplier(supplier)}
+                            onClick={() => handleDelete(supplier)}
                             className="rounded-full border border-rose-300 px-3 py-1 text-xs font-semibold text-rose-800 hover:bg-rose-50"
                           >
                             Eliminar
