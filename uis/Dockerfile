@@ -14,12 +14,12 @@ COPY backoffice/package.json ./
 RUN npm install
 
 # ------------------------------------------------------------------
-# Stage 2: Instalar dependencias del website
+# Stage 2: Instalar dependencias del website (Tailwind build)
 # ------------------------------------------------------------------
 FROM base AS website-deps
 WORKDIR /app/website
-#COPY website/package.json ./
-#RUN npm install
+COPY website/package.json ./
+RUN npm install
 
 # ------------------------------------------------------------------
 # Stage 3: Imagen final con ambas apps
@@ -29,9 +29,9 @@ WORKDIR /app
 
 # Copiar dependencias instaladas
 COPY --from=backoffice-deps /app/backoffice/node_modules ./backoffice/node_modules
-#COPY --from=website-deps /app/website/node_modules ./website/node_modules
+COPY --from=website-deps /app/website/node_modules ./website/node_modules
 
-# Copiar código fuente
+# Copiar código fuente (incluye dist/styles.css si ya existe)
 COPY backoffice ./backoffice
 COPY website ./website
 
