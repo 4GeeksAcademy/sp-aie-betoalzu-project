@@ -9,26 +9,12 @@
     />
     <title>Nexova Solutions | Talento, Formación y Soporte con IA</title>
 
-    <!-- Tailwind CSS v4 (browser build) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Tailwind CSS v4 compilado localmente -->
+    <link rel="stylesheet" href="dist/styles.css" />
 
-    <style type="text/tailwindcss">
-       @theme {
-        --color-brand: #0f766e;
-        --color-brand-dark: #115e59;
-        --color-accent: #f59e0b;
-        --color-surface: #f8fafc;
-        --font-display: "Outfit", "Segoe UI", sans-serif;
-      }
-
-      @layer utilities {
-        .bg-grid {
-          background-image:
-            linear-gradient(to right, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
-          background-size: 32px 32px;
-        }
-      }
+    <style>
+      @layer theme, base, components, utilities;
+      /* Custom utilities inline (add overrides here if needed) */
     </style>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
