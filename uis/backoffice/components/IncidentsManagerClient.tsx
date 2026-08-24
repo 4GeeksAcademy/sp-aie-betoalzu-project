@@ -166,30 +166,6 @@ export default function IncidentsManagerClient() {
     }
   }
 
-  async function onTransition(incident: Incident, nextStatus: string) {
-    setError('');
-    try {
-      const updated = await updateIncidentStatus(incident.id, nextStatus as Incident['status']);
-      setIncidents((prev) => prev.map((i) => (i.id === incident.id ? updated : i)));
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cambiar estado.');
-    }
-  }
-
-  async function handleSeed() {
-    if (!window.confirm('¿Cargar datos historicos desde incidents-nexova.csv? Se eliminaran los datos actuales primero.')) return;
-    setSeedMessage('');
-    setError('');
-    try {
-      const result = await seedIncidentsFromCsv();
-      setSeedMessage(`Seed completado: ${result.inserted} incidencias insertadas.`);
-      await loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error en seed.');
-    }
-  }
-
   const nextStatusMap: Record<string, string[]> = {
     open: ['in_progress', 'discarded'],
     in_progress: ['resolved', 'discarded'],

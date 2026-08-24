@@ -126,13 +126,13 @@ export default function SuppliersManagerClient({ initialSuppliers, initialError 
 
   async function onToggleStatus(supplier: Supplier) {
     const nextStatus: SupplierStatus = supplier.status === 'active' ? 'suspended' : 'active';
-    setError('');
+    setPageError('');
 
     try {
       const updated = await updateSupplierStatus(supplier.id, nextStatus);
       setSuppliers((current) => current.map((item) => (item.id === supplier.id ? updated : item)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No fue posible actualizar el estado.');
+      setPageError(err instanceof Error ? err.message : 'No fue posible actualizar el estado.');
     }
   }
 
