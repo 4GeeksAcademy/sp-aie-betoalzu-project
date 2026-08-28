@@ -112,7 +112,7 @@ class SupplierUpdate(BaseModel):
 
 
 class Supplier(SupplierBase):
-    updated_at: datetime
+    updated_at: datetime = Field(default_factory=_utc_now)
 
     def renewal_due_in_days(self, days: int = 60, *, reference_date: date | None = None) -> bool:
         if self.contract_renewal_date is None:

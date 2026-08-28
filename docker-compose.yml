@@ -20,6 +20,7 @@ services:
       - ./server.py:/app/server.py
       - ./services/:/app/services/
       - ./data/:/app/data/
+      - ./scripts/:/app/scripts/
     env_file:
       - .env
     networks:

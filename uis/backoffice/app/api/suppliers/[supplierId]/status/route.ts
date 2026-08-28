@@ -1,4 +1,4 @@
-import { proxyToBackend } from '../../_shared';
+import { proxyToSuppliersBackend } from '../../_shared';
 
 type Params = {
   params: Promise<{ supplierId: string }>;
@@ -7,8 +7,13 @@ type Params = {
 export async function PATCH(request: Request, { params }: Params) {
   const { supplierId } = await params;
   const body = await request.text();
-  return proxyToBackend(`/suppliers/${supplierId}/status`, {
+  const authHeader = request.headers.get('authorization') || '';
+  return proxyToSuppliersBackend(`/suppliers/${supplierId}/status`, {
     method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    },
     body,
   });
 }

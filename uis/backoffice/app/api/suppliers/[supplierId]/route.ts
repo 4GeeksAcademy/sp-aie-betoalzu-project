@@ -1,24 +1,37 @@
-import { proxyToBackend } from '../_shared';
+import { proxyToSuppliersBackend } from '../_shared';
 
 type Params = {
   params: Promise<{ supplierId: string }>;
 };
 
-export async function GET(_: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   const { supplierId } = await params;
-  return proxyToBackend(`/suppliers/${supplierId}`, { method: 'GET' });
+  const authHeader = request.headers.get('authorization') || '';
+  return proxyToSuppliersBackend(`/suppliers/${supplierId}`, {
+    method: 'GET',
+    headers: authHeader ? { Authorization: authHeader } : {},
+  });
 }
 
 export async function PUT(request: Request, { params }: Params) {
   const { supplierId } = await params;
   const body = await request.text();
-  return proxyToBackend(`/suppliers/${supplierId}`, {
+  const authHeader = request.headers.get('authorization') || '';
+  return proxyToSuppliersBackend(`/suppliers/${supplierId}`, {
     method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    },
     body,
   });
 }
 
-export async function DELETE(_: Request, { params }: Params) {
+export async function DELETE(request: Request, { params }: Params) {
   const { supplierId } = await params;
-  return proxyToBackend(`/suppliers/${supplierId}`, { method: 'DELETE' });
+  const authHeader = request.headers.get('authorization') || '';
+  return proxyToSuppliersBackend(`/suppliers/${supplierId}`, {
+    method: 'DELETE',
+    headers: authHeader ? { Authorization: authHeader } : {},
+  });
 }

@@ -1,4 +1,5 @@
 import dynamic from 'next/dynamic';
+import { cookies } from 'next/headers';
 import { Supplier } from '@/types/supplier';
 
 const SuppliersManagerClient = dynamic(
@@ -15,8 +16,23 @@ async function loadInitialSuppliers(): Promise<{ suppliers: Supplier[]; error: s
     };
   }
 
+  // Forward the auth token from the request cookie so the backend can authenticate
+  let authHeader: Record<string, string> = {};
   try {
-    const response = await fetch(`${apiUrl}/suppliers`, { cache: 'no-store' });
+    const cookieStore = await cookies();
+    const token = cookieStore.get('nexova_token')?.value;
+    if (token) {
+      authHeader = { Authorization: `Bearer ${token}` };
+    }
+  } catch {
+    // cookies() no disponible en este contexto; se cargará desde el cliente
+  }
+
+  try {
+    const response = await fetch(`${apiUrl}/suppliers`, {
+      cache: 'no-store',
+      headers: { ...authHeader },
+    });
     const contentType = response.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
     const payload = isJson ? await response.json() : await response.text();
