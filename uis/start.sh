@@ -3,7 +3,6 @@
 # start.sh — Arranca ambas aplicaciones en modo producción
 # backoffice (Next.js build) + website (estático con Tailwind compilado)
 # ──────────────────────────────────────────────────────────────────
-set -e
 
 echo "=== Construyendo backoffice (Next.js) ==="
 cd /app/backoffice
@@ -16,8 +15,21 @@ BACKOFFICE_PID=$!
 echo "=== Construyendo CSS del website (Tailwind) ==="
 cd /app/website
 if [ -f "package.json" ]; then
-  npm install --silent
-  npm run build:css
+  # Intentar instalar tailwindcss si no está disponible
+  if ! command -v tailwindcss >/dev/null 2>&1 && [ -f "node_modules/.bin/tailwindcss" ]; then
+    export PATH="$PWD/node_modules/.bin:$PATH"
+  fi
+  if command -v tailwindcss >/dev/null 2>&1 || [ -f "node_modules/.bin/tailwindcss" ]; then
+    tailwindcss --input ./src/styles.css --output ./dist/styles.css --minify 2>&1 || echo "[WARN] Falló build de CSS del website"
+  else
+    echo "[WARN] tailwindcss no encontrado, instalando dependencias del website..."
+    npm install --silent 2>&1
+    if [ -f "node_modules/.bin/tailwindcss" ]; then
+      ./node_modules/.bin/tailwindcss --input ./src/styles.css --output ./dist/styles.css --minify 2>&1 || echo "[WARN] Falló build de CSS del website"
+    else
+      echo "[WARN] No se pudo instalar tailwindcss. El website se servirá sin CSS compilado."
+    fi
+  fi
 fi
 
 echo "=== Sirviendo website estático en el puerto 3000 ==="
