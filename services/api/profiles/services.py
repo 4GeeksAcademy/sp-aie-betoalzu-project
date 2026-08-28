@@ -21,15 +21,15 @@ def _open_profiles_table():
     return db, db.table("profiles")
 
 
-def _serialize_profile(doc) -> dict:
-    """Convert a TinyDB document into a safe response dict."""
-    return {
-        "id": doc.doc_id,
-        "user_id": doc["user_id"],
-        "name": doc.get("name"),
-        "phone": doc.get("phone"),
-        "address": doc.get("address"),
-    }
+def _serialize_profile(doc) -> ProfileOut:
+    """Convert a TinyDB document into a ProfileOut."""
+    return ProfileOut(
+        id=doc.doc_id,
+        user_id=doc["user_id"],
+        name=doc.get("name"),
+        phone=doc.get("phone"),
+        address=doc.get("address"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ def _serialize_profile(doc) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def get_profile_by_user_id(user_id: int) -> dict | None:
+def get_profile_by_user_id(user_id: int) -> ProfileOut | None:
     """Return the profile linked to the given user_id, or None."""
     db, table = _open_profiles_table()
     try:
@@ -50,7 +50,7 @@ def get_profile_by_user_id(user_id: int) -> dict | None:
         db.close()
 
 
-def create_profile(user_id: int, payload: ProfileCreate) -> dict:
+def create_profile(user_id: int, payload: ProfileCreate) -> ProfileOut:
     """Create a new profile for a user.
 
     Raises ValueError if a profile already exists for this user.
@@ -76,7 +76,7 @@ def create_profile(user_id: int, payload: ProfileCreate) -> dict:
         db.close()
 
 
-def update_profile(user_id: int, payload: ProfileUpdate) -> dict | None:
+def update_profile(user_id: int, payload: ProfileUpdate) -> ProfileOut | None:
     """Update profile fields for the given user.
 
     Returns the updated profile or None if no profile exists.

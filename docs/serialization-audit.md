@@ -102,7 +102,7 @@
 | 6.8 | `/users/{id}` | PUT | Actualizar usuario | ⚠️ Parcialmente serializado | `update_user()` retorna dict de `_serialize_user()`. |
 | 6.9 | `/users/{id}` | DELETE | Eliminar usuario | ✅ Serializado | Retorna `{"message": ...}`. |
 
-**Sugerencia (6.5–6.8):** Refactorizar `_serialize_user()` para retornar un `UserOut(...)` y usar `.model_dump(mode="json")` en las rutas.
+**Sugerencia (6.5–6.8):** Refactorizar `_serialize_user()` para retornar un `UserOut(...)` y usarlo en los endpoints de users (6.5–6.8).
 
 ---
 
@@ -129,4 +129,77 @@
 
 ---
 
-*Fin del informe de auditoría.*
+## Cambios realizados
+
+A continuación se documentan los cambios aplicados para corregir los problemas de serialización identificados en la auditoría.
+
+### 1. `GET /api/incidents/summary` (2.3) — ✅ Ahora serializado
+
+**Cambios:**
+- `services/api/incidents/services.py`:
+  - `get_summary()` ahora retorna `IncidentSummary` (Pydantic model) en lugar de `dict[str, Any]`.
+  - Se añadió `IncidentSummary` a los imports.
+  - Tipo de retorno cambiado de `dict[str, Any]` a `IncidentSummary`.
+- `services/api/incidents/routes.py`:
+  - El endpoint ahora invoca `.model_dump(mode="json")` sobre el resultado de `get_summary()`.
+
+### 2. `POST /api/incidents/seed` (2.4) — ✅ Ahora serializado
+
+**Cambios:**
+- `services/api/incidents/models.py`: Se creó el modelo Pydantic `SeedResult` con campos `total_rows`, `inserted`, `discarded`, `skipped`, `status`.
+- `services/api/incidents/routes.py`:
+  - `_seed_from_csv()` ahora retorna `SeedResult` en lugar de `dict`.
+  - Los errores (`FileNotFoundError`, `ValueError`) se lanzan como excepciones en lugar de retornar dicts con `"error"`.
+  - El endpoint `seed_incidents_from_csv` llama a `.model_dump(mode="json")`.
+  - Se añadió `SeedResult` a los imports.
+
+### 3. Inventario (3.1–3.6) — ✅ Ahora serializados
+
+**Cambios en `services/api/inventory/services.py`:**
+- `_serialize_asset()` ahora retorna `AssetResponse` (incluye `current_stock` calculado internamente).
+- `_serialize_entry()` ahora retorna `AssetEntryResponse`.
+- `_serialize_exit()` ahora retorna `AssetExitResponse`.
+- `create_asset()` → retorna `AssetResponse`.
+- `list_assets()` → retorna `list[AssetResponse]`.
+- `get_asset()` → retorna `AssetResponse | None`.
+- `update_asset()` → retorna `AssetResponse | None`.
+- `create_entry()` → retorna `AssetEntryResponse`.
+- `create_exit()` → retorna `AssetExitResponse`.
+
+**Cambios en `services/api/inventory/routes.py`:**
+- Todos los endpoints ahora llaman a `.model_dump(mode="json")` sobre los resultados de los servicios.
+
+### 4. Users (6.5–6.8) — ✅ Ahora serializados
+
+**Cambios en `services/api/users/services.py`:**
+- `_serialize_user()` ahora retorna `UserOut` (Pydantic) en lugar de `dict`.
+- Se añadió `UserOut` a los imports.
+- `create_user()` → retorna `UserOut`.
+- `get_user_by_id()` → retorna `UserOut | None`.
+- `list_users()` → retorna `list[UserOut]`.
+- `update_user()` → retorna `UserOut | None`.
+
+**Cambios en `services/api/users/routes.py`:**
+- Todos los endpoints CRUD ahora llaman a `.model_dump(mode="json")` sobre los resultados.
+
+### 5. Profiles (4.1, 4.2) — ✅ Ahora serializados
+
+**Cambios en `services/api/profiles/services.py`:**
+- `_serialize_profile()` ahora retorna `ProfileOut` (Pydantic) en lugar de `dict`.
+- `get_profile_by_user_id()` → retorna `ProfileOut | None`.
+- `create_profile()` → retorna `ProfileOut`.
+- `update_profile()` → retorna `ProfileOut | None`.
+
+*Nota: Los endpoints ya tenían `response_model=ProfileOut`, por lo que FastAPI ya realizaba la validación de salida. El cambio en los servicios garantiza consistencia interna.*
+
+---
+
+### Estado final tras los cambios
+
+| Estado | Cantidad | Endpoints |
+|--------|:--------:|-----------|
+| ✅ Serializado | **30** | Todos excepto 1.1 |
+| ⚠️ Parcialmente serializado | **1** | 1.1 (`POST /api/incidents/analyze`) |
+| ❌ No serializado | **0** | — |
+
+**Pendiente (baja prioridad):** El endpoint `POST /api/incidents/analyze` (1.1) sigue usando `build_summary()` que retorna dict plano. Para serializarlo completamente habría que crear un Pydantic `AnalysisSummaryResponse` o refactorizar para usar `AnalysisResult.model_dump()`.
