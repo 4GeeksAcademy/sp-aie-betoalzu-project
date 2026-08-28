@@ -36,14 +36,14 @@ def _json_error(message: str, status_code: int):
 @inventory_api.get("/products")
 def get_products():
     """Lista todos los activos con current_stock calculado."""
-    return list_assets()
+    return [asset.model_dump(mode="json") for asset in list_assets()]
 
 
 @inventory_api.post("/products", status_code=201)
 def post_product(payload: AssetCreate):
     """Registra un nuevo activo."""
     try:
-        return create_asset(payload)
+        return create_asset(payload).model_dump(mode="json")
     except ValueError as exc:
         return _json_error(str(exc), 409)
 
@@ -54,7 +54,7 @@ def get_product_by_id(product_id: int):
     asset = get_asset(product_id)
     if asset is None:
         return _json_error("Asset not found.", 404)
-    return asset
+    return asset.model_dump(mode="json")
 
 
 @inventory_api.put("/products/{product_id}")
@@ -64,7 +64,7 @@ def put_product(product_id: int, payload: AssetUpdate):
         result = update_asset(product_id, payload)
         if result is None:
             return _json_error("Asset not found.", 404)
-        return result
+        return result.model_dump(mode="json")
     except ValueError as exc:
         return _json_error(str(exc), 409)
 
@@ -84,7 +84,7 @@ def post_inbound_order(
     Requiere autenticación. El user_uuid se extrae del token JWT.
     """
     try:
-        return create_entry(payload, user_uuid=str(current_user.id))
+        return create_entry(payload, user_uuid=str(current_user.id)).model_dump(mode="json")
     except ValueError as exc:
         return _json_error(str(exc), 404)
 
@@ -104,7 +104,7 @@ def post_outbound_order(
     - assigned_to debe ser nulo si exit_type=consumption.
     """
     try:
-        return create_exit(payload, user_uuid=str(current_user.id))
+        return create_exit(payload, user_uuid=str(current_user.id)).model_dump(mode="json")
     except ValueError as exc:
         return _json_error(str(exc), 400)
 

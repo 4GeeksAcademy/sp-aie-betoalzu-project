@@ -43,39 +43,40 @@ def _open_tables():
 # ---------------------------------------------------------------------------
 
 
-def _serialize_asset(doc: dict) -> dict:
-    return {
-        "id": doc.doc_id,
-        "name": doc["name"],
-        "sku": doc["sku"],
-        "category": doc["category"],
-        "office": doc["office"],
-    }
+def _serialize_asset(doc: dict) -> AssetResponse:
+    return AssetResponse(
+        id=doc.doc_id,
+        name=doc["name"],
+        sku=doc["sku"],
+        category=doc["category"],
+        office=doc["office"],
+        current_stock=compute_current_stock(doc.doc_id),
+    )
 
 
-def _serialize_entry(doc: dict) -> dict:
-    return {
-        "id": doc.doc_id,
-        "asset_id": doc["asset_id"],
-        "quantity": doc["quantity"],
-        "supplier": doc["supplier"],
-        "office": doc["office"],
-        "created_at": doc["created_at"],
-        "user_uuid": doc["user_uuid"],
-    }
+def _serialize_entry(doc: dict) -> AssetEntryResponse:
+    return AssetEntryResponse(
+        id=doc.doc_id,
+        asset_id=doc["asset_id"],
+        quantity=doc["quantity"],
+        supplier=doc["supplier"],
+        office=doc["office"],
+        created_at=doc["created_at"],
+        user_uuid=doc["user_uuid"],
+    )
 
 
-def _serialize_exit(doc: dict) -> dict:
-    return {
-        "id": doc.doc_id,
-        "asset_id": doc["asset_id"],
-        "quantity": doc["quantity"],
-        "exit_type": doc["exit_type"],
-        "assigned_to": doc.get("assigned_to"),
-        "office": doc["office"],
-        "created_at": doc["created_at"],
-        "user_uuid": doc["user_uuid"],
-    }
+def _serialize_exit(doc: dict) -> AssetExitResponse:
+    return AssetExitResponse(
+        id=doc.doc_id,
+        asset_id=doc["asset_id"],
+        quantity=doc["quantity"],
+        exit_type=doc["exit_type"],
+        assigned_to=doc.get("assigned_to"),
+        office=doc["office"],
+        created_at=doc["created_at"],
+        user_uuid=doc["user_uuid"],
+    )
 
 
 def compute_current_stock(asset_id: int) -> int:
@@ -103,7 +104,7 @@ def compute_current_stock(asset_id: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def create_asset(payload: AssetCreate) -> dict:
+def create_asset(payload: AssetCreate) -> AssetResponse:
     db, assets_table, _, _ = _open_tables()
     try:
         AssetQ = Query()
@@ -119,33 +120,30 @@ def create_asset(payload: AssetCreate) -> dict:
         db.close()
 
 
-def list_assets() -> list[dict]:
+def list_assets() -> list[AssetResponse]:
     db, assets_table, _, _ = _open_tables()
     try:
         results = []
         for doc in assets_table.all():
             asset = _serialize_asset(doc)
-            asset["current_stock"] = compute_current_stock(doc.doc_id)
             results.append(asset)
         return results
     finally:
         db.close()
 
 
-def get_asset(asset_id: int) -> dict | None:
+def get_asset(asset_id: int) -> AssetResponse | None:
     db, assets_table, _, _ = _open_tables()
     try:
         doc = assets_table.get(doc_id=asset_id)
         if doc is None:
             return None
-        asset = _serialize_asset(doc)
-        asset["current_stock"] = compute_current_stock(doc.doc_id)
-        return asset
+        return _serialize_asset(doc)
     finally:
         db.close()
 
 
-def update_asset(asset_id: int, payload: AssetUpdate) -> dict | None:
+def update_asset(asset_id: int, payload: AssetUpdate) -> AssetResponse | None:
     db, assets_table, _, _ = _open_tables()
     try:
         doc = assets_table.get(doc_id=asset_id)
@@ -158,9 +156,7 @@ def update_asset(asset_id: int, payload: AssetUpdate) -> dict | None:
 
         assets_table.update(update_data, doc_ids=[asset_id])
         updated = assets_table.get(doc_id=asset_id)
-        asset = _serialize_asset(updated)
-        asset["current_stock"] = compute_current_stock(asset_id)
-        return asset
+        return _serialize_asset(updated)
     finally:
         db.close()
 
@@ -170,7 +166,7 @@ def update_asset(asset_id: int, payload: AssetUpdate) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def create_entry(payload: AssetEntryCreate, user_uuid: str) -> dict:
+def create_entry(payload: AssetEntryCreate, user_uuid: str) -> AssetEntryResponse:
     db, assets_table, entries_table, _ = _open_tables()
     try:
         doc = assets_table.get(doc_id=payload.asset_id)
@@ -192,7 +188,7 @@ def create_entry(payload: AssetEntryCreate, user_uuid: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def create_exit(payload: AssetExitCreate, user_uuid: str) -> dict:
+def create_exit(payload: AssetExitCreate, user_uuid: str) -> AssetExitResponse:
     db, assets_table, entries_table, exits_table = _open_tables()
     try:
         # Check asset exists

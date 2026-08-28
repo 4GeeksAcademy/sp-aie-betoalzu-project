@@ -17,6 +17,8 @@ from services.api.incidents.models import (
     IncidentOut,
     IncidentStatus,
     IncidentStatusUpdate,
+    IncidentSummary,
+    SeedResult,
     VALID_TRANSITIONS,
     _TERMINAL_STATUSES,
 )
@@ -213,7 +215,7 @@ def delete_incident(incident_id: int) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def get_summary() -> dict[str, Any]:
+def get_summary() -> IncidentSummary:
     """Return aggregated summary statistics for the dashboard."""
     db, table = _open_incidents_table()
     try:
@@ -251,15 +253,15 @@ def get_summary() -> dict[str, Any]:
             if doc.get("category") == "sla_breach" and s in ("open", "in_progress"):
                 open_critical_count += 1
 
-        return {
-            "total": total,
-            "by_status": by_status,
-            "by_category": by_category,
-            "by_branch": by_branch,
-            "by_origin": by_origin,
-            "open_oldest": oldest_open,
-            "open_critical_count": open_critical_count,
-        }
+        return IncidentSummary(
+            total=total,
+            by_status=by_status,
+            by_category=by_category,
+            by_branch=by_branch,
+            by_origin=by_origin,
+            open_oldest=oldest_open,
+            open_critical_count=open_critical_count,
+        )
     finally:
         db.close()
 
