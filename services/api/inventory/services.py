@@ -6,6 +6,7 @@ from typing import Any
 
 from tinydb import TinyDB, Query
 
+from services.cache import backend_cache
 from services.schemas import (
     AssetCreate,
     AssetUpdate,
@@ -115,21 +116,25 @@ def create_asset(payload: AssetCreate) -> AssetResponse:
         doc_data = payload.model_dump(mode="json")
         doc_id = assets_table.insert(doc_data)
         doc = assets_table.get(doc_id=doc_id)
+        backend_cache.invalidate_tags(["inventory_assets", "inventory_orders"])
         return _serialize_asset(doc)
     finally:
         db.close()
 
 
 def list_assets() -> list[AssetResponse]:
-    db, assets_table, _, _ = _open_tables()
-    try:
-        results = []
-        for doc in assets_table.all():
-            asset = _serialize_asset(doc)
-            results.append(asset)
-        return results
-    finally:
-        db.close()
+    @backend_cache.cached(ttl=120, tags=["inventory_assets"])
+    def _fetch() -> list[AssetResponse]:
+        db, assets_table, _, _ = _open_tables()
+        try:
+            results = []
+            for doc in assets_table.all():
+                asset = _serialize_asset(doc)
+                results.append(asset)
+            return results
+        finally:
+            db.close()
+    return _fetch()
 
 
 def get_asset(asset_id: int) -> AssetResponse | None:
@@ -156,6 +161,7 @@ def update_asset(asset_id: int, payload: AssetUpdate) -> AssetResponse | None:
 
         assets_table.update(update_data, doc_ids=[asset_id])
         updated = assets_table.get(doc_id=asset_id)
+        backend_cache.invalidate_tags(["inventory_assets", "inventory_orders"])
         return _serialize_asset(updated)
     finally:
         db.close()
@@ -178,6 +184,7 @@ def create_entry(payload: AssetEntryCreate, user_uuid: str) -> AssetEntryRespons
         doc_data["created_at"] = _utc_now_str()
         doc_id = entries_table.insert(doc_data)
         created = entries_table.get(doc_id=doc_id)
+        backend_cache.invalidate_tags(["inventory_orders", "inventory_assets"])
         return _serialize_entry(created)
     finally:
         db.close()
@@ -221,6 +228,7 @@ def create_exit(payload: AssetExitCreate, user_uuid: str) -> AssetExitResponse:
         doc_data["created_at"] = _utc_now_str()
         doc_id = exits_table.insert(doc_data)
         created = exits_table.get(doc_id=doc_id)
+        backend_cache.invalidate_tags(["inventory_orders", "inventory_assets"])
         return _serialize_exit(created)
     finally:
         db.close()
@@ -232,48 +240,53 @@ def create_exit(payload: AssetExitCreate, user_uuid: str) -> AssetExitResponse:
 
 
 def list_orders() -> list[dict]:
-    db, assets_table, entries_table, exits_table = _open_tables()
-    try:
-        results = []
+    @backend_cache.cached(ttl=120, tags=["inventory_orders"])
+    def _fetch() -> list[dict]:
+        db, assets_table, entries_table, exits_table = _open_tables()
+        try:
+            results = []
 
-        for doc in entries_table.all():
-            asset_doc = assets_table.get(doc_id=doc["asset_id"])
-            results.append(
-                OrderResponse(
-                    id=doc.doc_id,
-                    type="entry",
-                    asset_id=doc["asset_id"],
-                    asset_name=asset_doc["name"] if asset_doc else "Unknown",
-                    asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
-                    quantity=doc["quantity"],
-                    office=Office(doc["office"]),
-                    user_uuid=doc["user_uuid"],
-                    created_at=doc["created_at"],
-                    supplier=doc["supplier"],
-                    exit_type=None,
-                    assigned_to=None,
-                ).model_dump(mode="json")
-            )
+            for doc in entries_table.all():
+                asset_doc = assets_table.get(doc_id=doc["asset_id"])
+                results.append(
+                    OrderResponse(
+                        id=doc.doc_id,
+                        type="entry",
+                        asset_id=doc["asset_id"],
+                        asset_name=asset_doc["name"] if asset_doc else "Unknown",
+                        asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
+                        quantity=doc["quantity"],
+                        office=Office(doc["office"]),
+                        user_uuid=doc["user_uuid"],
+                        created_at=doc["created_at"],
+                        supplier=doc["supplier"],
+                        exit_type=None,
+                        assigned_to=None,
+                    ).model_dump(mode="json")
+                )
 
-        for doc in exits_table.all():
-            asset_doc = assets_table.get(doc_id=doc["asset_id"])
-            results.append(
-                OrderResponse(
-                    id=doc.doc_id,
-                    type="exit",
-                    asset_id=doc["asset_id"],
-                    asset_name=asset_doc["name"] if asset_doc else "Unknown",
-                    asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
-                    quantity=doc["quantity"],
-                    office=Office(doc["office"]),
-                    user_uuid=doc["user_uuid"],
-                    created_at=doc["created_at"],
-                    supplier=None,
-                    exit_type=ExitType(doc["exit_type"]),
-                    assigned_to=doc.get("assigned_to"),
-                ).model_dump(mode="json")
-            )
+            for doc in exits_table.all():
+                asset_doc = assets_table.get(doc_id=doc["asset_id"])
+                results.append(
+                    OrderResponse(
+                        id=doc.doc_id,
+                        type="exit",
+                        asset_id=doc["asset_id"],
+                        asset_name=asset_doc["name"] if asset_doc else "Unknown",
+                        asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
+                        quantity=doc["quantity"],
+                        office=Office(doc["office"]),
+                        user_uuid=doc["user_uuid"],
+                        created_at=doc["created_at"],
+                        supplier=None,
+                        exit_type=ExitType(doc["exit_type"]),
+                        assigned_to=doc.get("assigned_to"),
+                    ).model_dump(mode="json")
+                )
 
-        return results
-    finally:
-        db.close()
+            results.sort(key=lambda r: r["created_at"], reverse=True)
+            return results
+        finally:
+            db.close()
+
+    return _fetch()

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchProducts } from '@/lib/inventory';
 import { getStoredToken } from '@/lib/auth-token';
@@ -62,7 +62,10 @@ export default function InventoryProductsPage() {
   }
 
   // Sort products alphabetically by name
-  const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedProducts = useMemo(
+    () => [...products].sort((a, b) => a.name.localeCompare(b.name)),
+    [products],
+  );
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8">

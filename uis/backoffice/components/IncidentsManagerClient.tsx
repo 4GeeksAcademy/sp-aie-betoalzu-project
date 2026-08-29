@@ -173,16 +173,20 @@ export default function IncidentsManagerClient() {
     discarded: [],
   };
 
-  const summaryCards = summary
-    ? [
-        { label: 'Total', value: summary.total, color: 'bg-slate-900' },
-        { label: 'Abiertas', value: summary.by_status.open || 0, color: 'bg-amber-500' },
-        { label: 'En progreso', value: summary.by_status.in_progress || 0, color: 'bg-blue-500' },
-        { label: 'Resueltas', value: summary.by_status.resolved || 0, color: 'bg-emerald-500' },
-        { label: 'Descartadas', value: summary.by_status.discarded || 0, color: 'bg-slate-400' },
-        { label: 'Críticas (SLA)', value: summary.open_critical_count, color: 'bg-rose-600' },
-      ]
-    : [];
+  const summaryCards = useMemo(
+    () =>
+      summary
+        ? [
+            { label: 'Total', value: summary.total, color: 'bg-slate-900' },
+            { label: 'Abiertas', value: summary.by_status.open || 0, color: 'bg-amber-500' },
+            { label: 'En progreso', value: summary.by_status.in_progress || 0, color: 'bg-blue-500' },
+            { label: 'Resueltas', value: summary.by_status.resolved || 0, color: 'bg-emerald-500' },
+            { label: 'Descartadas', value: summary.by_status.discarded || 0, color: 'bg-slate-400' },
+            { label: 'Críticas (SLA)', value: summary.open_critical_count, color: 'bg-rose-600' },
+          ]
+        : [],
+    [summary],
+  );
 
   return (
     <section className="space-y-6">
