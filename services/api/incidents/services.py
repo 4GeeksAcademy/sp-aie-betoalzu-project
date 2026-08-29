@@ -11,6 +11,7 @@ from typing import Any
 
 from tinydb import TinyDB, Query
 
+from services.cache import backend_cache
 from services.api.incidents.models import (
     IncidentCreate,
     IncidentUpdate,
@@ -86,6 +87,7 @@ def create_incident(payload: IncidentCreate) -> IncidentOut:
     try:
         doc_id = table.insert(data)
         doc = table.get(doc_id=doc_id)
+        backend_cache.invalidate_tags(["incidents_summary", "incidents_list"])
         return _serialize_incident(doc)
     finally:
         db.close()
@@ -119,6 +121,17 @@ def list_incidents(
     origin: str | None = None,
 ) -> list[IncidentOut]:
     """List incidents with optional filters."""
+    if not any([status, category, branch, origin]):
+        # Cache only when no filters (most common call)
+        @backend_cache.cached(ttl=60, tags=["incidents_list"])
+        def _list_all() -> list[IncidentOut]:
+            db, table = _open_incidents_table()
+            try:
+                return [_serialize_incident(doc) for doc in table.all()]
+            finally:
+                db.close()
+        return _list_all()
+
     db, table = _open_incidents_table()
     try:
         results: list[IncidentOut] = []
@@ -159,6 +172,7 @@ def update_incident(incident_id: int, payload: IncidentUpdate) -> IncidentOut:
         merged = {**doc, **update_data}
         table.update(merged, doc_ids=[incident_id])
         updated = table.get(doc_id=incident_id)
+        backend_cache.invalidate_tags(["incidents_summary", "incidents_list"])
         return _serialize_incident(updated)
     finally:
         db.close()
@@ -192,6 +206,7 @@ def update_incident_status(incident_id: int, payload: IncidentStatusUpdate) -> I
             doc_ids=[incident_id],
         )
         updated = table.get(doc_id=incident_id)
+        backend_cache.invalidate_tags(["incidents_summary", "incidents_list"])
         return _serialize_incident(updated)
     finally:
         db.close()
@@ -205,6 +220,7 @@ def delete_incident(incident_id: int) -> bool:
         if doc is None:
             return False
         table.remove(doc_ids=[incident_id])
+        backend_cache.invalidate_tags(["incidents_summary", "incidents_list"])
         return True
     finally:
         db.close()
@@ -217,53 +233,57 @@ def delete_incident(incident_id: int) -> bool:
 
 def get_summary() -> IncidentSummary:
     """Return aggregated summary statistics for the dashboard."""
-    db, table = _open_incidents_table()
-    try:
-        all_docs = table.all()
-        total = len(all_docs)
+    @backend_cache.cached(ttl=120, tags=["incidents_summary"])
+    def _compute() -> IncidentSummary:
+        db, table = _open_incidents_table()
+        try:
+            all_docs = table.all()
+            total = len(all_docs)
 
-        by_status: dict[str, int] = {}
-        by_category: dict[str, int] = {}
-        by_branch: dict[str, int] = {}
-        by_origin: dict[str, int] = {}
+            by_status: dict[str, int] = {}
+            by_category: dict[str, int] = {}
+            by_branch: dict[str, int] = {}
+            by_origin: dict[str, int] = {}
 
-        # Track oldest open incident
-        oldest_open: str | None = None
-        open_critical_count = 0
+            # Track oldest open incident
+            oldest_open: str | None = None
+            open_critical_count = 0
 
-        for doc in all_docs:
-            s = doc.get("status", "unknown")
-            by_status[s] = by_status.get(s, 0) + 1
+            for doc in all_docs:
+                s = doc.get("status", "unknown")
+                by_status[s] = by_status.get(s, 0) + 1
 
-            cat = doc.get("category", "unknown")
-            by_category[cat] = by_category.get(cat, 0) + 1
+                cat = doc.get("category", "unknown")
+                by_category[cat] = by_category.get(cat, 0) + 1
 
-            br = doc.get("branch", "unknown")
-            by_branch[br] = by_branch.get(br, 0) + 1
+                br = doc.get("branch", "unknown")
+                by_branch[br] = by_branch.get(br, 0) + 1
 
-            o = doc.get("origin", "unknown")
-            by_origin[o] = by_origin.get(o, 0) + 1
+                o = doc.get("origin", "unknown")
+                by_origin[o] = by_origin.get(o, 0) + 1
 
-            if s == "open":
-                created = doc.get("created_at", "")
-                if created and (oldest_open is None or created < oldest_open):
-                    oldest_open = created
+                if s == "open":
+                    created = doc.get("created_at", "")
+                    if created and (oldest_open is None or created < oldest_open):
+                        oldest_open = created
 
-            # SLA breaches are critical
-            if doc.get("category") == "sla_breach" and s in ("open", "in_progress"):
-                open_critical_count += 1
+                # SLA breaches are critical
+                if doc.get("category") == "sla_breach" and s in ("open", "in_progress"):
+                    open_critical_count += 1
 
-        return IncidentSummary(
-            total=total,
-            by_status=by_status,
-            by_category=by_category,
-            by_branch=by_branch,
-            by_origin=by_origin,
-            open_oldest=oldest_open,
-            open_critical_count=open_critical_count,
-        )
-    finally:
-        db.close()
+            return IncidentSummary(
+                total=total,
+                by_status=by_status,
+                by_category=by_category,
+                by_branch=by_branch,
+                by_origin=by_origin,
+                open_oldest=oldest_open,
+                open_critical_count=open_critical_count,
+            )
+        finally:
+            db.close()
+
+    return _compute()
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +317,7 @@ def clear_all_incidents() -> int:
     try:
         removed = len(table.all())
         table.truncate()
+        backend_cache.invalidate_tags(["incidents_summary", "incidents_list"])
         return removed
     finally:
         db.close()
@@ -313,6 +334,7 @@ def bulk_insert_incidents(records: list[dict]) -> int:
             record["updated_at"] = now
             table.insert(record)
             inserted += 1
+        backend_cache.invalidate_tags(["incidents_summary", "incidents_list"])
         return inserted
     finally:
         db.close()

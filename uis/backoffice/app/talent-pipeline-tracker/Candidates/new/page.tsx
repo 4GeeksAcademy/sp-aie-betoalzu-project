@@ -1,10 +1,14 @@
 "use client";
 
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CandidateForm } from '@/types/candidate';
-import CandidateFormComponent from '@/components/CandidateFormComponent';
 import { createCandidate } from '@/services/api';
+
+const CandidateFormComponent = dynamic(() => import('@/components/CandidateFormComponent'), {
+  loading: () => <div className="py-20 text-center text-sm text-slate-400">Cargando formulario...</div>,
+});
 
 export default function NewCandidatePage() {
   const router = useRouter();
