@@ -1,0 +1,1012 @@
+{
+  "title": "Nexova Telemetry Event Schemas",
+  "description": "Esquemas de todos los eventos de telemetría del sistema de inventario de Nexova. Validable contra JSON Schema draft-07.",
+  "version": "1.0",
+  "schemaVersion": "1.0",
+  "schemata": "https://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "eventEnvelope": {
+      "title": "Event Envelope Estándar",
+      "description": "Envelope estándar que todo evento de telemetría en Nexova debe cumplir.",
+      "type": "object",
+      "required": [
+        "eventId",
+        "timestamp",
+        "sessionId",
+        "userId",
+        "event_type",
+        "schemaVersion",
+        "requestId",
+        "properties"
+      ],
+      "properties": {
+        "eventId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "description": "Identificador único del evento (UUID v4)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$",
+          "description": "Marca de tiempo ISO 8601 en UTC"
+        },
+        "sessionId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "description": "Identificador de la sesión del usuario (UUID v4)"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Identificador interno del usuario (nunca nombre real ni email)"
+        },
+        "event_type": {
+          "type": "string",
+          "pattern": "^[a-z]+_[a-z]+(_[a-z]+)?$",
+          "description": "Tipo de evento en formato entidad_acción (snake_case, verbos en pasado)"
+        },
+        "schemaVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+$",
+          "description": "Versión del esquema del evento (semver simplificado)"
+        },
+        "requestId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "description": "Identificador de correlación para trazar una petición HTTP"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Payload específico del evento. Solo contiene claves del allowlist."
+        }
+      }
+    },
+    "commonProperties": {
+      "office": {
+        "type": "string",
+        "enum": ["valencia", "miami"],
+        "description": "Oficina asociada al evento"
+      },
+      "product_id": {
+        "type": "string",
+        "description": "Identificador único del producto"
+      },
+      "product_category": {
+        "type": "string",
+        "enum": ["training_kit", "certification", "onboarding_equipment"],
+        "description": "Categoría del producto"
+      },
+      "programme_id": {
+        "type": "string",
+        "description": "Identificador del programa de formación o certificación"
+      },
+      "quantity": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Cantidad de unidades"
+      },
+      "currency": {
+        "type": "string",
+        "enum": ["EUR", "USD"],
+        "description": "Moneda de la operación"
+      }
+    }
+  },
+  "events": {
+    "inbound_order_created": {
+      "title": "Orden de entrada creada",
+      "description": "Se crea una orden de entrada de material desde un proveedor.",
+      "category": "Negocio / Inventario",
+      "classification": "obligatorio",
+      "streamOrBatch": "stream",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "inbound_order_created" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "quantity",
+            "currency",
+            "unit_cost",
+            "supplier_id",
+            "inbound_order_id"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" },
+            "unit_cost": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Coste unitario del producto en la moneda de la oficina"
+            },
+            "supplier_id": {
+              "type": "string",
+              "description": "Identificador del proveedor"
+            },
+            "inbound_order_id": {
+              "type": "string",
+              "description": "Identificador único de la orden de entrada"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para inbound_order_created"
+        }
+      }
+    },
+    "outbound_order_created": {
+      "title": "Orden de salida creada",
+      "description": "Se entrega un kit o certificado a un destinatario.",
+      "category": "Negocio / Inventario",
+      "classification": "obligatorio",
+      "streamOrBatch": "stream",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "outbound_order_created" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "quantity",
+            "currency",
+            "outbound_order_id",
+            "recipient_type"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" },
+            "outbound_order_id": {
+              "type": "string",
+              "description": "Identificador único de la orden de salida"
+            },
+            "recipient_type": {
+              "type": "string",
+              "enum": ["client", "candidate", "consultant", "support_agent"],
+              "description": "Tipo de destinatario"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para outbound_order_created"
+        }
+      }
+    },
+    "stock_threshold_triggered": {
+      "title": "Umbral de stock activado",
+      "description": "El stock de un producto cae por debajo del umbral mínimo configurado.",
+      "category": "Negocio / Inventario",
+      "classification": "obligatorio",
+      "streamOrBatch": "stream",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "stock_threshold_triggered" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "current_stock",
+            "minimum_threshold",
+            "quantity",
+            "currency"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "current_stock": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Stock actual después de la operación que activó el umbral"
+            },
+            "minimum_threshold": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Umbral mínimo configurado para este producto en esta oficina"
+            },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para stock_threshold_triggered"
+        }
+      }
+    },
+    "direct_stock_edit_rejected": {
+      "title": "Edición directa de stock rechazada",
+      "description": "Un usuario intenta modificar el stock directamente (sin orden) y el sistema lo rechaza.",
+      "category": "Negocio / Inventario",
+      "classification": "obligatorio",
+      "streamOrBatch": "stream",
+      "containsPII": false,
+      "sanitization": "El userId en el envelope identifica al usuario sin incluir nombre ni email.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "direct_stock_edit_rejected" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "quantity",
+            "currency",
+            "attempted_action",
+            "rejection_reason"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" },
+            "attempted_action": {
+              "type": "string",
+              "enum": ["increase_stock", "decrease_stock", "set_stock"],
+              "description": "Acción que se intentó realizar"
+            },
+            "rejection_reason": {
+              "type": "string",
+              "enum": ["direct_edit_not_allowed", "insufficient_permissions"],
+              "description": "Motivo del rechazo"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para direct_stock_edit_rejected"
+        }
+      }
+    },
+    "kit_cost_variance_detected": {
+      "title": "Variación de coste detectada",
+      "description": "El costo unitario de una orden de entrada varía más de un umbral respecto al histórico.",
+      "category": "Negocio / Inventario",
+      "classification": "obligatorio",
+      "streamOrBatch": "batch",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "kit_cost_variance_detected" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "quantity",
+            "currency",
+            "expected_unit_cost",
+            "actual_unit_cost",
+            "variance_percentage",
+            "threshold_percentage",
+            "supplier_id",
+            "inbound_order_id"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" },
+            "expected_unit_cost": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Coste unitario histórico esperado"
+            },
+            "actual_unit_cost": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Coste unitario real de la orden actual"
+            },
+            "variance_percentage": {
+              "type": "number",
+              "description": "Porcentaje de variación ((actual - esperado) / esperado × 100)"
+            },
+            "threshold_percentage": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Umbral de variación configurado que disparó la alerta"
+            },
+            "supplier_id": {
+              "type": "string",
+              "description": "Identificador del proveedor"
+            },
+            "inbound_order_id": {
+              "type": "string",
+              "description": "Identificador de la orden de entrada asociada"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para kit_cost_variance_detected"
+        }
+      }
+    },
+    "login_attempted": {
+      "title": "Intento de inicio de sesión",
+      "description": "Un usuario intenta autenticarse en el sistema.",
+      "category": "Autenticación",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": true,
+      "sanitization": "La IP origen se anonimiza truncándola a /24 (IPv4) o /48 (IPv6) antes de inferir el país. No se almacena la IP cruda.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "login_attempted" },
+        "properties": {
+          "type": "object",
+          "required": ["login_method"],
+          "properties": {
+            "login_method": {
+              "type": "string",
+              "enum": ["password", "sso", "magic_link"],
+              "description": "Método de autenticación"
+            },
+            "ip_country": {
+              "type": "string",
+              "description": "País de origen de la IP (anonimizado a nivel de país)"
+            },
+            "office_hint": {
+              "type": "string",
+              "enum": ["valencia", "miami", "unknown"],
+              "description": "Posible oficina inferida por IP"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para login_attempted"
+        }
+      }
+    },
+    "login_failed": {
+      "title": "Inicio de sesión fallido",
+      "description": "Un intento de autenticación falla por credenciales inválidas, cuenta bloqueada u otro motivo.",
+      "category": "Autenticación",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": true,
+      "sanitization": "No se almacena la contraseña ni datos biométricos. La IP se anonimiza. userId puede estar ausente si el usuario no existe.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "login_failed" },
+        "properties": {
+          "type": "object",
+          "required": ["failure_reason", "attempt_count"],
+          "properties": {
+            "failure_reason": {
+              "type": "string",
+              "enum": ["invalid_credentials", "account_locked", "account_disabled", "mfa_failed", "expired_password"],
+              "description": "Motivo del fallo de autenticación"
+            },
+            "attempt_count": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Número de intentos fallidos consecutivos"
+            },
+            "ip_country": {
+              "type": "string",
+              "description": "País de origen anonimizado"
+            },
+            "login_method": {
+              "type": "string",
+              "description": "Método de autenticación intentado"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para login_failed"
+        }
+      }
+    },
+    "session_expired": {
+      "title": "Sesión expirada",
+      "description": "Una sesión de usuario expira por inactividad o por superar el tiempo máximo.",
+      "category": "Autenticación",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "batch",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "session_expired" },
+        "properties": {
+          "type": "object",
+          "required": ["expiry_reason", "session_duration_seconds"],
+          "properties": {
+            "expiry_reason": {
+              "type": "string",
+              "enum": ["inactivity_timeout", "max_session_duration", "forced_logout"],
+              "description": "Motivo de la expiración"
+            },
+            "session_duration_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Duración total de la sesión en segundos"
+            },
+            "last_active_page": {
+              "type": "string",
+              "description": "Última página donde el usuario estaba activo antes de la expiración"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para session_expired"
+        }
+      }
+    },
+    "password_reset_requested": {
+      "title": "Restablecimiento de contraseña solicitado",
+      "description": "Un usuario solicita un restablecimiento de contraseña.",
+      "category": "Autenticación",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "batch",
+      "containsPII": true,
+      "sanitization": "La IP se anonimiza truncándola. No se almacena el email ni datos de contacto.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "password_reset_requested" },
+        "properties": {
+          "type": "object",
+          "required": ["reset_method", "user_identified"],
+          "properties": {
+            "reset_method": {
+              "type": "string",
+              "enum": ["email", "sms", "security_questions"],
+              "description": "Método de restablecimiento solicitado"
+            },
+            "user_identified": {
+              "type": "boolean",
+              "description": "Indica si el usuario fue encontrado en el sistema"
+            },
+            "ip_country": {
+              "type": "string",
+              "description": "País de origen anonimizado"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para password_reset_requested"
+        }
+      }
+    },
+    "api_latency_recorded": {
+      "title": "Latencia de API registrada",
+      "description": "Se completa una petición a un endpoint del backoffice y se mide su tiempo de respuesta.",
+      "category": "Rendimiento",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": true,
+      "sanitization": "La ruta se sanitiza sustituyendo segmentos variables (UUIDs, números) con placeholders tipo {id} antes de registrar.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "api_latency_recorded" },
+        "properties": {
+          "type": "object",
+          "required": ["endpoint", "http_method", "http_status", "latency_ms"],
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "description": "Ruta del endpoint (plantilla sanitizada, ej. /api/products/{id})"
+            },
+            "http_method": {
+              "type": "string",
+              "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+              "description": "Método HTTP"
+            },
+            "http_status": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599,
+              "description": "Código de estado HTTP devuelto"
+            },
+            "latency_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tiempo de respuesta en milisegundos"
+            },
+            "office": { "$ref": "#/definitions/commonProperties/office" }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para api_latency_recorded"
+        }
+      }
+    },
+    "page_load_timed": {
+      "title": "Tiempo de carga de página",
+      "description": "Una página del backoffice completa su carga en el navegador del usuario.",
+      "category": "Rendimiento",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "batch",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "page_load_timed" },
+        "properties": {
+          "type": "object",
+          "required": ["page_name", "load_time_ms"],
+          "properties": {
+            "page_name": {
+              "type": "string",
+              "description": "Identificador de la página o sección"
+            },
+            "load_time_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tiempo total de carga percibido (ms)"
+            },
+            "time_to_first_byte_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tiempo hasta el primer byte (TTFB)"
+            },
+            "dom_interactive_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tiempo hasta que el DOM es interactivo"
+            },
+            "office": { "$ref": "#/definitions/commonProperties/office" }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para page_load_timed"
+        }
+      }
+    },
+    "frontend_error_captured": {
+      "title": "Error de frontend capturado",
+      "description": "Se produce un error no capturado en el frontend del backoffice.",
+      "category": "Errores",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": true,
+      "sanitization": "error_message se inspecciona para eliminar patrones de datos de usuario (emails, teléfonos) mediante regex. error_stack solo se almacena internamente y no se expone en dashboards públicos.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "frontend_error_captured" },
+        "properties": {
+          "type": "object",
+          "required": ["error_type", "error_message", "page_name"],
+          "properties": {
+            "error_type": {
+              "type": "string",
+              "description": "Tipo de error (TypeError, ReferenceError, NetworkError, PromiseRejection, etc.)"
+            },
+            "error_message": {
+              "type": "string",
+              "description": "Mensaje del error (sanitizado, sin datos de usuario)"
+            },
+            "error_stack": {
+              "type": "string",
+              "description": "Stack trace del error (uso interno, no expuesto en dashboards públicos)"
+            },
+            "page_name": {
+              "type": "string",
+              "description": "Página donde ocurrió el error"
+            },
+            "user_agent": {
+              "type": "string",
+              "description": "User-Agent agrupado (navegador, versión, SO)"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para frontend_error_captured"
+        }
+      }
+    },
+    "api_error_returned": {
+      "title": "Error de API devuelto",
+      "description": "Un endpoint de la API devuelve un error HTTP (4xx o 5xx).",
+      "category": "Errores",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": true,
+      "sanitization": "El cuerpo de la respuesta de error se inspecciona y se extrae solo un mensaje genérico. No se almacenan trazas de pila del backend ni valores de entrada del usuario.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "api_error_returned" },
+        "properties": {
+          "type": "object",
+          "required": ["endpoint", "http_method", "http_status"],
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "description": "Ruta del endpoint (plantilla sanitizada)"
+            },
+            "http_method": {
+              "type": "string",
+              "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+              "description": "Método HTTP"
+            },
+            "http_status": {
+              "type": "integer",
+              "minimum": 400,
+              "maximum": 599,
+              "description": "Código de error HTTP"
+            },
+            "error_code": {
+              "type": "string",
+              "description": "Código interno de error, si existe"
+            },
+            "error_message": {
+              "type": "string",
+              "description": "Mensaje de error sanitizado (sin datos de usuario ni trazas de pila)"
+            },
+            "office": { "$ref": "#/definitions/commonProperties/office" }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para api_error_returned"
+        }
+      }
+    },
+    "page_viewed": {
+      "title": "Página visitada",
+      "description": "Un operador navega a una sección o vista del backoffice.",
+      "category": "Navegación / UX",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "batch",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "page_viewed" },
+        "properties": {
+          "type": "object",
+          "required": ["page_name"],
+          "properties": {
+            "page_name": {
+              "type": "string",
+              "description": "Identificador de la página o vista visitada"
+            },
+            "previous_page": {
+              "type": "string",
+              "description": "Página desde la que llegó el usuario"
+            },
+            "referrer_origin": {
+              "type": "string",
+              "enum": ["navigation_menu", "breadcrumb", "direct_link", "notification"],
+              "description": "Origen de la navegación"
+            },
+            "office": { "$ref": "#/definitions/commonProperties/office" }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para page_viewed"
+        }
+      }
+    },
+    "flow_abandoned": {
+      "title": "Flujo abandonado",
+      "description": "Un usuario inicia un flujo multi-paso pero lo abandona antes de completar el paso final.",
+      "category": "Navegación / UX",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "batch",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "flow_abandoned" },
+        "properties": {
+          "type": "object",
+          "required": ["flow_type", "abandoned_step", "total_steps"],
+          "properties": {
+            "flow_type": {
+              "type": "string",
+              "enum": ["create_inbound_order", "create_outbound_order", "register_product", "generate_report"],
+              "description": "Tipo de flujo abandonado"
+            },
+            "abandoned_step": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Número del paso en el que se abandonó el flujo (1-indexed)"
+            },
+            "total_steps": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Número total de pasos del flujo"
+            },
+            "time_spent_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Tiempo que el usuario estuvo en el flujo antes de abandonar"
+            },
+            "has_form_data": {
+              "type": "boolean",
+              "description": "Indica si el usuario había rellenado algún campo del formulario"
+            },
+            "office": { "$ref": "#/definitions/commonProperties/office" }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para flow_abandoned"
+        }
+      }
+    },
+    "inbound_order_cancelled": {
+      "title": "Orden de entrada cancelada",
+      "description": "Una orden de entrada se cancela antes de completarse.",
+      "category": "Negocio / Inventario",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "inbound_order_cancelled" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "inbound_order_id",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "quantity",
+            "currency",
+            "supplier_id"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "inbound_order_id": {
+              "type": "string",
+              "description": "Identificador de la orden cancelada"
+            },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" },
+            "cancellation_reason": {
+              "type": "string",
+              "description": "Motivo de la cancelación, si el usuario lo proporciona"
+            },
+            "supplier_id": {
+              "type": "string",
+              "description": "Proveedor asociado"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para inbound_order_cancelled"
+        }
+      }
+    },
+    "outbound_order_cancelled": {
+      "title": "Orden de salida cancelada",
+      "description": "Una orden de salida se cancela antes de completarse.",
+      "category": "Negocio / Inventario",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": false,
+      "sanitization": "No se incluyen datos del destinatario.",
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "outbound_order_cancelled" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "outbound_order_id",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "quantity",
+            "currency"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "outbound_order_id": {
+              "type": "string",
+              "description": "Identificador de la orden cancelada"
+            },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" },
+            "cancellation_reason": {
+              "type": "string",
+              "description": "Motivo de la cancelación, si el usuario lo proporciona"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para outbound_order_cancelled"
+        }
+      }
+    },
+    "product_low_stock_warning": {
+      "title": "Advertencia de stock bajo",
+      "description": "El stock de un producto cae al 150 % del umbral mínimo configurado (zona de precaución).",
+      "category": "Negocio / Inventario",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "stream",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "product_low_stock_warning" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "current_stock",
+            "minimum_threshold",
+            "trigger_percentage",
+            "currency"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "current_stock": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Stock actual"
+            },
+            "minimum_threshold": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Umbral mínimo configurado"
+            },
+            "trigger_percentage": {
+              "type": "number",
+              "description": "Porcentaje respecto al umbral que disparó la advertencia (ej. 150)"
+            },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para product_low_stock_warning"
+        }
+      }
+    },
+    "report_generated": {
+      "title": "Reporte generado",
+      "description": "Un usuario genera un reporte desde el módulo de informes.",
+      "category": "Negocio / Inventario",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "batch",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "report_generated" },
+        "properties": {
+          "type": "object",
+          "required": ["report_type", "format"],
+          "properties": {
+            "report_type": {
+              "type": "string",
+              "enum": ["inventory_summary", "consumption_by_programme", "cost_evolution", "stock_alerts"],
+              "description": "Tipo de reporte"
+            },
+            "office_filter": {
+              "type": "string",
+              "enum": ["valencia", "miami", "all"],
+              "description": "Filtro de oficina aplicado"
+            },
+            "programme_filter": {
+              "type": "string",
+              "description": "Filtro de programa aplicado"
+            },
+            "date_range_days": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Rango de fechas del reporte en días"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["screen", "pdf", "csv"],
+              "description": "Formato de exportación"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para report_generated"
+        }
+      }
+    },
+    "supplier_order_delayed": {
+      "title": "Orden de proveedor retrasada",
+      "description": "Una orden de entrada no se completa dentro del plazo estimado de entrega del proveedor.",
+      "category": "Negocio / Inventario",
+      "classification": "oportunidad_identificada",
+      "streamOrBatch": "batch",
+      "containsPII": false,
+      "sanitization": null,
+      "allOf": [{ "$ref": "#/definitions/eventEnvelope" }],
+      "properties": {
+        "event_type": { "const": "supplier_order_delayed" },
+        "properties": {
+          "type": "object",
+          "required": [
+            "office",
+            "supplier_id",
+            "inbound_order_id",
+            "product_id",
+            "product_category",
+            "programme_id",
+            "quantity",
+            "currency",
+            "estimated_delivery_days",
+            "actual_delay_days"
+          ],
+          "properties": {
+            "office": { "$ref": "#/definitions/commonProperties/office" },
+            "supplier_id": {
+              "type": "string",
+              "description": "Identificador del proveedor"
+            },
+            "inbound_order_id": {
+              "type": "string",
+              "description": "Identificador de la orden de entrada retrasada"
+            },
+            "product_id": { "$ref": "#/definitions/commonProperties/product_id" },
+            "product_category": { "$ref": "#/definitions/commonProperties/product_category" },
+            "programme_id": { "$ref": "#/definitions/commonProperties/programme_id" },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
+            "currency": { "$ref": "#/definitions/commonProperties/currency" },
+            "estimated_delivery_days": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Plazo estimado de entrega en días"
+            },
+            "actual_delay_days": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Días de retraso acumulados"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Allowlist de propiedades para supplier_order_delayed"
+        }
+      }
+    }
+  },
+  "eventIndex": {
+    "obligatorios": [
+      "inbound_order_created",
+      "outbound_order_created",
+      "stock_threshold_triggered",
+      "direct_stock_edit_rejected",
+      "kit_cost_variance_detected"
+    ],
+    "oportunidades_identificadas": [
+      "login_attempted",
+      "login_failed",
+      "session_expired",
+      "password_reset_requested",
+      "api_latency_recorded",
+      "page_load_timed",
+      "frontend_error_captured",
+      "api_error_returned",
+      "page_viewed",
+      "flow_abandoned",
+      "inbound_order_cancelled",
+      "outbound_order_cancelled",
+      "product_low_stock_warning",
+      "report_generated",
+      "supplier_order_delayed"
+    ],
+    "total": 20
+  }
+}
