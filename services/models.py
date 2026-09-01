@@ -24,6 +24,9 @@ class Asset(SQLModel, table=True):
     sku: str = Field(min_length=1, max_length=50, unique=True, index=True)
     category: str = Field(max_length=50)  # "hardware" | "peripherals" | "office_supplies" | "training_materials"
     office: str = Field(max_length=50)    # "Valencia" | "Miami"
+    currency: str = Field(max_length=3)    # "USD" | "EUR"
+    unit_cost: float | None = Field(default=None, description="Coste unitario del producto")
+    program: str | None = Field(default=None, max_length=100, description="Programa asociado (ventas B2B, Onboarding, formación de liderazgo)")
 
 
 # ---------------------------------------------------------------------------

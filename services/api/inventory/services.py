@@ -18,7 +18,38 @@ from services.schemas import (
     OrderResponse,
     Office,
     ExitType,
+    Currency,
+    Program,
+    AssetCategory,
 )
+
+
+# ---------------------------------------------------------------------------
+# Helpers: auto-assign currency & program
+# ---------------------------------------------------------------------------
+
+
+def _derive_currency(office: str) -> str:
+    """USD para Miami, EUR para Valencia."""
+    if office == "Miami":
+        return "USD"
+    return "EUR"
+
+
+def _derive_program(category: str) -> str | None:
+    """Asigna programa según la categoría.
+
+    - 'training_materials' → 'formación de liderazgo'
+    - 'certification'     → 'ventas B2B'
+    - 'onboarding_equipment' → 'Onboarding'
+    - Otras categorías → None
+    """
+    program_map = {
+        AssetCategory.TRAINING_MATERIALS.value: Program.LEADERSHIP_TRAINING.value,
+        AssetCategory.CERTIFICATION.value: Program.B2B_SALES.value,
+        AssetCategory.ONBOARDING_EQUIPMENT.value: Program.ONBOARDING.value,
+    }
+    return program_map.get(category)
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
 _INVENTORY_DB_PATH = _ROOT_DIR / "data" / "inventory_db.json"
@@ -51,6 +82,9 @@ def _serialize_asset(doc: dict) -> AssetResponse:
         sku=doc["sku"],
         category=doc["category"],
         office=doc["office"],
+        currency=doc.get("currency", _derive_currency(doc["office"])),
+        unit_cost=doc.get("unit_cost"),
+        program=doc.get("program"),
         current_stock=compute_current_stock(doc.doc_id),
     )
 
@@ -114,6 +148,13 @@ def create_asset(payload: AssetCreate) -> AssetResponse:
             raise ValueError(f"Asset with SKU '{payload.sku}' already exists.")
 
         doc_data = payload.model_dump(mode="json")
+        # Auto-assign currency from office if not provided
+        if not doc_data.get("currency"):
+            doc_data["currency"] = _derive_currency(payload.office.value)
+        # Auto-assign program from category if not provided
+        if not doc_data.get("program"):
+            doc_data["program"] = _derive_program(payload.category.value)
+
         doc_id = assets_table.insert(doc_data)
         doc = assets_table.get(doc_id=doc_id)
         backend_cache.invalidate_tags(["inventory_assets", "inventory_orders"])
@@ -158,6 +199,14 @@ def update_asset(asset_id: int, payload: AssetUpdate) -> AssetResponse | None:
         update_data = payload.model_dump(exclude_unset=True, mode="json")
         if not update_data:
             return _serialize_asset(doc)
+
+        # Re-derive currency if office changed
+        if "office" in update_data:
+            update_data["currency"] = _derive_currency(update_data["office"])
+
+        # Re-derive program if category changed
+        if "category" in update_data:
+            update_data["program"] = _derive_program(update_data["category"])
 
         assets_table.update(update_data, doc_ids=[asset_id])
         updated = assets_table.get(doc_id=asset_id)
@@ -240,53 +289,55 @@ def create_exit(payload: AssetExitCreate, user_uuid: str) -> AssetExitResponse:
 
 
 def list_orders() -> list[dict]:
-    @backend_cache.cached(ttl=120, tags=["inventory_orders"])
-    def _fetch() -> list[dict]:
-        db, assets_table, entries_table, exits_table = _open_tables()
-        try:
-            results = []
+    """Return the latest inventory orders without serving stale in-memory cache.
 
-            for doc in entries_table.all():
-                asset_doc = assets_table.get(doc_id=doc["asset_id"])
-                results.append(
-                    OrderResponse(
-                        id=doc.doc_id,
-                        type="entry",
-                        asset_id=doc["asset_id"],
-                        asset_name=asset_doc["name"] if asset_doc else "Unknown",
-                        asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
-                        quantity=doc["quantity"],
-                        office=Office(doc["office"]),
-                        user_uuid=doc["user_uuid"],
-                        created_at=doc["created_at"],
-                        supplier=doc["supplier"],
-                        exit_type=None,
-                        assigned_to=None,
-                    ).model_dump(mode="json")
-                )
+    The inventory history needs to reflect the current TinyDB state immediately; an
+    in-memory TTL cache can otherwise keep returning an old empty list even after a
+    successful reseed or new inbound/outbound creation.
+    """
+    db, assets_table, entries_table, exits_table = _open_tables()
+    try:
+        results = []
 
-            for doc in exits_table.all():
-                asset_doc = assets_table.get(doc_id=doc["asset_id"])
-                results.append(
-                    OrderResponse(
-                        id=doc.doc_id,
-                        type="exit",
-                        asset_id=doc["asset_id"],
-                        asset_name=asset_doc["name"] if asset_doc else "Unknown",
-                        asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
-                        quantity=doc["quantity"],
-                        office=Office(doc["office"]),
-                        user_uuid=doc["user_uuid"],
-                        created_at=doc["created_at"],
-                        supplier=None,
-                        exit_type=ExitType(doc["exit_type"]),
-                        assigned_to=doc.get("assigned_to"),
-                    ).model_dump(mode="json")
-                )
+        for doc in entries_table.all():
+            asset_doc = assets_table.get(doc_id=doc["asset_id"])
+            results.append(
+                OrderResponse(
+                    id=doc.doc_id,
+                    type="entry",
+                    asset_id=doc["asset_id"],
+                    asset_name=asset_doc["name"] if asset_doc else "Unknown",
+                    asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
+                    quantity=doc["quantity"],
+                    office=Office(doc["office"]),
+                    user_uuid=doc["user_uuid"],
+                    created_at=doc["created_at"],
+                    supplier=doc["supplier"],
+                    exit_type=None,
+                    assigned_to=None,
+                ).model_dump(mode="json")
+            )
 
-            results.sort(key=lambda r: r["created_at"], reverse=True)
-            return results
-        finally:
-            db.close()
+        for doc in exits_table.all():
+            asset_doc = assets_table.get(doc_id=doc["asset_id"])
+            results.append(
+                OrderResponse(
+                    id=doc.doc_id,
+                    type="exit",
+                    asset_id=doc["asset_id"],
+                    asset_name=asset_doc["name"] if asset_doc else "Unknown",
+                    asset_sku=asset_doc["sku"] if asset_doc else "Unknown",
+                    quantity=doc["quantity"],
+                    office=Office(doc["office"]),
+                    user_uuid=doc["user_uuid"],
+                    created_at=doc["created_at"],
+                    supplier=None,
+                    exit_type=ExitType(doc["exit_type"]),
+                    assigned_to=doc.get("assigned_to"),
+                ).model_dump(mode="json")
+            )
 
-    return _fetch()
+        results.sort(key=lambda r: r["created_at"], reverse=True)
+        return results
+    finally:
+        db.close()
