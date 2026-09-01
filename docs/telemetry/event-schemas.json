@@ -851,6 +851,7 @@
             "programme_id",
             "current_stock",
             "minimum_threshold",
+            "quantity",
             "trigger_percentage",
             "currency"
           ],
@@ -869,6 +870,7 @@
               "minimum": 0,
               "description": "Umbral mínimo configurado"
             },
+            "quantity": { "$ref": "#/definitions/commonProperties/quantity" },
             "trigger_percentage": {
               "type": "number",
               "description": "Porcentaje respecto al umbral que disparó la advertencia (ej. 150)"

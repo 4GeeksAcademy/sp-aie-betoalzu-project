@@ -4,25 +4,23 @@
 Usage:
     python scripts/seed_inventory.py
 
-Creates the following seed data:
+Creates a demo inventory that matches the business requirements for Nexova:
 
-Assets (6):
-  - Portátil 14" Business (NXV-IT-001) — hardware — Valencia
-  - Portátil 14" Business (NXV-IT-002) — hardware — Miami
-  - Ratón ergonómico (NXV-PER-001) — peripherals — Valencia
-  - Hub USB-C (NXV-PER-002) — peripherals — Miami
-  - Resma de papel A4 (NXV-OFF-001) — office_supplies — Valencia
-  - Cuaderno de formación en liderazgo (NXV-TRN-001) — training_materials — Valencia
+Assets (7):
+  - 3 categories covered: training_materials, certification, onboarding_equipment
+  - program assigned to every category
+  - realistic stock movement across Valencia and Miami
 
-AssetEntries (4):
-  - NXV-IT-001: 10 uds (TechDistrib Valencia S.L.) + 5 uds (Nexova IT Procurement)
-  - NXV-PER-001: 20 uds (TechDistrib Valencia S.L.)
-  - NXV-OFF-001: 50 uds (Office Depot Miami)
+InboundOrders (13):
+  - mixed between Valencia and Miami
+  - enough volume to support later reporting and analytics
 
-AssetExits (3):
-  - NXV-IT-001: 2 uds — allocation → "Ana García"
-  - NXV-IT-001: 1 ud — allocation → "Carlos López"
-  - NXV-OFF-001: 10 uds — consumption → null
+OutboundOrders (13):
+  - includes low-stock scenarios for stock_threshold_triggered
+
+The seeded data intentionally includes:
+  - 2 assets with stock below the operational threshold (triggering low-stock alerts)
+  - 1 high-cost certification batch to simulate a kit_cost_variance_detected condition
 """
 
 from __future__ import annotations
@@ -60,49 +58,125 @@ def seed_inventory() -> dict[str, int]:
     entries_table.truncate()
     exits_table.truncate()
 
-    AssetQ = Query()
-
     # -------------------------------------------------------------------
-    # Assets
+    # Assets: 7 products covering the required categories and programs.
     # -------------------------------------------------------------------
     assets_data = [
-        {"name": "Portátil 14\" Business", "sku": "NXV-IT-001", "category": "hardware", "office": "Valencia"},
-        {"name": "Portátil 14\" Business", "sku": "NXV-IT-002", "category": "hardware", "office": "Miami"},
-        {"name": "Ratón ergonómico", "sku": "NXV-PER-001", "category": "peripherals", "office": "Valencia"},
-        {"name": "Hub USB-C", "sku": "NXV-PER-002", "category": "peripherals", "office": "Miami"},
-        {"name": "Resma de papel A4", "sku": "NXV-OFF-001", "category": "office_supplies", "office": "Valencia"},
-        {"name": "Cuaderno de formación en liderazgo", "sku": "NXV-TRN-001", "category": "training_materials", "office": "Valencia"},
+        {
+            "name": "Manual de liderazgo",
+            "sku": "NXV-TRN-001",
+            "category": "training_materials",
+            "office": "Valencia",
+            "currency": "EUR",
+            "unit_cost": 18.5,
+            "program": "formación de liderazgo",
+        },
+        {
+            "name": "Kit de certificación B2B",
+            "sku": "NXV-CERT-001",
+            "category": "certification",
+            "office": "Valencia",
+            "currency": "EUR",
+            "unit_cost": 42.0,
+            "program": "ventas B2B",
+        },
+        {
+            "name": "Laptop de onboarding",
+            "sku": "NXV-ONB-001",
+            "category": "onboarding_equipment",
+            "office": "Valencia",
+            "currency": "EUR",
+            "unit_cost": 620.0,
+            "program": "Onboarding",
+        },
+        {
+            "name": "Módulo de formación comercial",
+            "sku": "NXV-TRN-002",
+            "category": "training_materials",
+            "office": "Miami",
+            "currency": "USD",
+            "unit_cost": 22.0,
+            "program": "formación de liderazgo",
+        },
+        {
+            "name": "Pack de certificación Q2",
+            "sku": "NXV-CERT-002",
+            "category": "certification",
+            "office": "Miami",
+            "currency": "USD",
+            "unit_cost": 54.0,
+            "program": "ventas B2B",
+        },
+        {
+            "name": "Kit de bienvenida para soporte",
+            "sku": "NXV-ONB-002",
+            "category": "onboarding_equipment",
+            "office": "Miami",
+            "currency": "USD",
+            "unit_cost": 590.0,
+            "program": "Onboarding",
+        },
+        {
+            "name": "Guía de onboarding para clientes",
+            "sku": "NXV-ONB-003",
+            "category": "onboarding_equipment",
+            "office": "Valencia",
+            "currency": "EUR",
+            "unit_cost": 120.0,
+            "program": "Onboarding",
+        },
     ]
 
     asset_ids = {}
-    for a in assets_data:
-        doc_id = assets_table.insert(a)
-        asset_ids[a["sku"]] = doc_id
+    for asset in assets_data:
+        doc_id = assets_table.insert(asset)
+        asset_ids[asset["sku"]] = doc_id
 
     # -------------------------------------------------------------------
-    # AssetEntries (Inbound)
+    # Inbound orders (13): split across Valencia and Miami.
+    # This dataset is intentionally designed so that some items fall below
+    # their operational threshold and one certification kit shows a cost jump.
     # -------------------------------------------------------------------
     entries_data = [
-        {"asset_id": asset_ids["NXV-IT-001"], "quantity": 10, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
-        {"asset_id": asset_ids["NXV-IT-001"], "quantity": 5, "supplier": "Nexova IT Procurement", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
-        {"asset_id": asset_ids["NXV-PER-001"], "quantity": 20, "supplier": "TechDistrib Valencia S.L.", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
-        {"asset_id": asset_ids["NXV-OFF-001"], "quantity": 50, "supplier": "Office Depot Miami", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-001"], "quantity": 20, "supplier": "Imprenta Valencia S.L.", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-001"], "quantity": 12, "supplier": "L&D Print Hub", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-001"], "quantity": 10, "supplier": "CertiPro Valencia", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-001"], "quantity": 8, "supplier": "Nexova Collaboration", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-001"], "quantity": 15, "supplier": "TechDistrib Valencia", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-001"], "quantity": 12, "supplier": "Northwest Hardware", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-002"], "quantity": 18, "supplier": "Miami Learning Lab", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-002"], "quantity": 9, "supplier": "Formación Global", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-002"], "quantity": 14, "supplier": "SalesCert Alliance", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-002"], "quantity": 10, "supplier": "SkillBridge Miami", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-002"], "quantity": 16, "supplier": "OnboardWorks Miami", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-002"], "quantity": 8, "supplier": "HireCore Valencia", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-003"], "quantity": 11, "supplier": "Welcome Pack Iberia", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
     ]
 
-    for e in entries_data:
-        entries_table.insert(e)
+    for entry in entries_data:
+        entries_table.insert(entry)
 
     # -------------------------------------------------------------------
-    # AssetExits (Outbound)
+    # Outbound orders (13): allocations and consumptions to consume the stock.
     # -------------------------------------------------------------------
     exits_data = [
-        {"asset_id": asset_ids["NXV-IT-001"], "quantity": 2, "exit_type": "allocation", "assigned_to": "Ana García", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
-        {"asset_id": asset_ids["NXV-IT-001"], "quantity": 1, "exit_type": "allocation", "assigned_to": "Carlos López", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
-        {"asset_id": asset_ids["NXV-OFF-001"], "quantity": 10, "exit_type": "consumption", "assigned_to": None, "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-001"], "quantity": 12, "exit_type": "allocation", "assigned_to": "Ana García", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-001"], "quantity": 6, "exit_type": "allocation", "assigned_to": "Laura Ortiz", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-001"], "quantity": 2, "exit_type": "consumption", "assigned_to": None, "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-001"], "quantity": 9, "exit_type": "allocation", "assigned_to": "Carmen Díaz", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-001"], "quantity": 7, "exit_type": "allocation", "assigned_to": "Marco Silva", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-001"], "quantity": 10, "exit_type": "allocation", "assigned_to": "Kai Chen", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-001"], "quantity": 7, "exit_type": "allocation", "assigned_to": "Nora López", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-002"], "quantity": 12, "exit_type": "allocation", "assigned_to": "Paula García", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-TRN-002"], "quantity": 6, "exit_type": "consumption", "assigned_to": None, "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-002"], "quantity": 9, "exit_type": "allocation", "assigned_to": "Marta Ríos", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-CERT-002"], "quantity": 5, "exit_type": "allocation", "assigned_to": "Eduardo Flores", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-002"], "quantity": 11, "exit_type": "allocation", "assigned_to": "Sofía Álvarez", "office": "Miami", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
+        {"asset_id": asset_ids["NXV-ONB-003"], "quantity": 8, "exit_type": "allocation", "assigned_to": "Pablo Navarro", "office": "Valencia", "user_uuid": DEFAULT_USER_UUID, "created_at": _utc_now_str()},
     ]
 
-    for ex in exits_data:
-        exits_table.insert(ex)
+    for exit_order in exits_data:
+        exits_table.insert(exit_order)
 
     db.close()
 
