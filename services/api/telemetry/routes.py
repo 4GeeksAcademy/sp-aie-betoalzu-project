@@ -3,13 +3,15 @@ import os
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import insert
 from sqlmodel import Session
 
+from services.cache import backend_cache
 from services.database import get_db
 from services.models import TelemetryEventRecord
+from services.telemetry.analysis import build_operational_report, default_window
 
 TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_ENDPOINT", "http://localhost:8000/telemetry/events")
 logger = logging.getLogger(__name__)
@@ -96,3 +98,46 @@ def receive_telemetry_events(
         TELEMETRY_ENDPOINT,
     )
     return {"received": received, "stored": len(records), "rejected": rejected}
+
+
+def _normalize_utc_iso(value: str | None, default_value: str | None = None) -> str:
+    if value is None:
+        if default_value is None:
+            raise ValueError("A date value is required.")
+        value = default_value
+    normalized = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
+    return parsed.astimezone().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@telemetry_api.get("/report")
+def get_telemetry_report(
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Return the technical telemetry summary with a 60-second in-memory cache."""
+    default_start, default_end = default_window()
+    start_value = start_date or default_start
+    end_value = end_date or default_end
+
+    try:
+        start_value = _normalize_utc_iso(start_value)
+        end_value = _normalize_utc_iso(end_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid ISO 8601 date parameter") from exc
+
+    if datetime.fromisoformat(start_value.replace("Z", "+00:00")) >= datetime.fromisoformat(end_value.replace("Z", "+00:00")):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than end_date")
+
+    cache_key = f"telemetry_report::{start_value}::{end_value}"
+    cached = backend_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    report = build_operational_report(start_value, end_value, session=db)
+    payload = {"period": {"from": start_value, "to": end_value}, "metrics": report}
+    backend_cache.set(cache_key, payload, ttl=60, tags=["telemetry_report"])
+    return payload

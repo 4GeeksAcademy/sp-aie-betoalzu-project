@@ -2,6 +2,8 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
@@ -65,3 +67,74 @@ def test_telemetry_events_stores_valid_events_and_rejects_invalid_ones():
     assert stored[0].event_type == "page_viewed"
     assert stored[0].service == "backoffice"
     assert stored[0].tags == {"page_name": "/inventory"}
+
+
+def test_telemetry_report_returns_operational_metrics():
+    with Session(engine) as session:
+        session.add_all(
+            [
+                TelemetryEventRecord(
+                    timestamp=datetime(2026, 9, 1, 8, 0, tzinfo=timezone.utc),
+                    service="backoffice",
+                    event_type="page_viewed",
+                    level="info",
+                    value=None,
+                    tags={"page_name": "/inventory"},
+                ),
+                TelemetryEventRecord(
+                    timestamp=datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc),
+                    service="backoffice",
+                    event_type="login_failed",
+                    level="error",
+                    value=None,
+                    tags={"failure_reason": "bad_password"},
+                ),
+                TelemetryEventRecord(
+                    timestamp=datetime(2026, 9, 2, 10, 0, tzinfo=timezone.utc),
+                    service="backoffice",
+                    event_type="user_login_failed",
+                    level="error",
+                    value=None,
+                    tags={"failure_reason": "bad_password"},
+                ),
+                TelemetryEventRecord(
+                    timestamp=datetime(2026, 9, 2, 11, 0, tzinfo=timezone.utc),
+                    service="backoffice",
+                    event_type="user_login_succeeded",
+                    level="info",
+                    value=None,
+                    tags={"login_method": "password"},
+                ),
+                TelemetryEventRecord(
+                    timestamp=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
+                    service="backoffice",
+                    event_type="api_error_returned",
+                    level="error",
+                    value=None,
+                    tags={"endpoint": "/inventory/products", "http_status": 500},
+                ),
+                TelemetryEventRecord(
+                    timestamp=datetime(2026, 9, 2, 13, 0, tzinfo=timezone.utc),
+                    service="backoffice",
+                    event_type="page_viewed",
+                    level="info",
+                    value=None,
+                    tags={"page_name": "/inventory"},
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get(
+        "/telemetry/report?start_date=2026-09-01T00:00:00Z&end_date=2026-09-03T00:00:00Z"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["period"]["from"] == "2026-09-01T00:00:00Z"
+    assert payload["period"]["to"] == "2026-09-03T00:00:00Z"
+    metrics = payload["metrics"]
+    assert any(item["date"] == "2026-09-01" for item in metrics["events_per_day"])
+    assert any(item["event_type"] == "login_failed" for item in metrics["error_rate_by_type"])
+    assert any(item["date"] == "2026-09-02" for item in metrics["auth_failure_rate"])
+    assert metrics["auth_failure_rate"][0]["failure_rate"] > 0
