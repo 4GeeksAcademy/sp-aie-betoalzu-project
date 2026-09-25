@@ -23,6 +23,7 @@ from services.api.users.routes import users_api
 from services.api.profiles.routes import profiles_api
 from services.api.inventory.routes import inventory_api
 from services.api.telemetry.routes import telemetry_api
+from services.reporting.routes import reporting_api
 from services.database import init_db
 
 
@@ -53,6 +54,7 @@ app.include_router(users_api)
 app.include_router(profiles_api)
 app.include_router(inventory_api)
 app.include_router(telemetry_api)
+app.include_router(reporting_api)
 
 # Serving the index file
 @app.get('/')
