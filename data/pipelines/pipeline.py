@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from services.database import engine
+from services.database import engine, init_db
 from services.models import TelemetryEventRecord
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,44 @@ def extract_business_events(week_start: date) -> list[dict[str, Any]]:
         ]
 
 
+@flow(name="extract_weekly_business_events")
+def extract_weekly_business_events_flow(week_start: date) -> list[dict[str, Any]]:
+    return extract_business_events(week_start)
+
+
+def _valid_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [event for event in events if isinstance(event, dict) and isinstance(event.get("tags"), dict)]
+
+
+@task
+def calculate_total_material_cost(events: list[dict[str, Any]]) -> float:
+    total = 0.0
+    for event in _valid_events(events):
+        if event.get("event_type") != "inbound_order_created":
+            continue
+        tags = event["tags"]
+        try:
+            total += float(tags.get("unit_cost", 0)) * int(tags.get("quantity", 1))
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+@task
+def count_kits_delivered(events: list[dict[str, Any]]) -> int:
+    return sum(event.get("event_type") == "outbound_order_created" for event in _valid_events(events))
+
+
+@task
+def count_shortage_events(events: list[dict[str, Any]]) -> int:
+    return sum(event.get("event_type") == "stock_threshold_triggered" for event in _valid_events(events))
+
+
+@task
+def count_cost_variance_events(events: list[dict[str, Any]]) -> int:
+    return sum(event.get("event_type") == "kit_cost_variance_detected" for event in _valid_events(events))
+
+
 def _cache_key(context: dict[str, Any], parameters: dict[str, Any]) -> str:
     payload = json.dumps(parameters["events"], default=str, sort_keys=True).encode("utf-8")
     digest = hashlib.sha256(payload).hexdigest()
@@ -153,16 +191,22 @@ def aggregate_weekly_performance(events: list[dict[str, Any]], week_start: date)
         if existing_currency and existing_currency != currency:
             raise ValueError(f"Mixed currencies for {office}/{programme_id}")
         row["currency"] = currency
-        if event["event_type"] == "inbound_order_created":
-            row["total_material_cost"] += float(tags.get("unit_cost", 0)) * int(tags.get("quantity", 1))
-        elif event["event_type"] == "outbound_order_created":
-            row["kits_delivered_count"] += 1
-        elif event["event_type"] == "stock_threshold_triggered":
-            row["shortage_events_count"] += 1
-        elif event["event_type"] == "kit_cost_variance_detected":
-            row["cost_variance_events_count"] += 1
+        row.setdefault("events", []).append(event)
+    for row in grouped.values():
+        row_events = row.pop("events", [])
+        row["total_material_cost"] = calculate_total_material_cost.fn(row_events)
+        row["kits_delivered_count"] = count_kits_delivered.fn(row_events)
+        row["shortage_events_count"] = count_shortage_events.fn(row_events)
+        row["cost_variance_events_count"] = count_cost_variance_events.fn(row_events)
     return [dict(office=office, programme_id=programme, week_start=week, **values)
             for (office, programme, week), values in grouped.items()]
+
+
+@flow(name="transform_weekly_office_program_performance")
+def transform_weekly_performance_flow(
+    events: list[dict[str, Any]], week_start: date
+) -> list[dict[str, Any]]:
+    return aggregate_weekly_performance(events, week_start)
 
 
 @task(retries=2, retry_delay_seconds=5)
@@ -192,6 +236,11 @@ def load_reporting_table(staging_rows: list[dict[str, Any]], week_start: date) -
     return len(staging_rows)
 
 
+@flow(name="load_weekly_office_program_performance")
+def load_weekly_reporting_flow(staging_rows: list[dict[str, Any]], week_start: date) -> int:
+    return load_reporting_table(staging_rows, week_start)
+
+
 @task
 def export_eval_snapshot(staging_rows: list[dict[str, Any]], week_start: date) -> None:
     """Optional secondary output; its failure must not block the reporting table."""
@@ -200,6 +249,13 @@ def export_eval_snapshot(staging_rows: list[dict[str, Any]], week_start: date) -
     (output_dir / f"weekly_{week_start.isoformat()}.json").write_text(
         json.dumps(staging_rows, default=str, indent=2), encoding="utf-8"
     )
+
+
+@flow(name="export_weekly_performance_snapshot")
+def export_weekly_eval_snapshot_flow(
+    staging_rows: list[dict[str, Any]], week_start: date
+) -> None:
+    export_eval_snapshot(staging_rows, week_start)
 
 
 @task(retries=2, retry_delay_seconds=5)
@@ -223,10 +279,10 @@ def weekly_office_program_performance_flow(week_start: date | None = None, trigg
     run_id = create_pipeline_run(target_week, trigger)
     events: list[dict[str, Any]] = []
     try:
-        events = extract_business_events(target_week)
-        rows = aggregate_weekly_performance(events, target_week)
-        rows_written = load_reporting_table(rows, target_week)
-        optional_state: State = export_eval_snapshot(rows, target_week, return_state=True)
+        events = extract_weekly_business_events_flow(target_week)
+        rows = transform_weekly_performance_flow(events, target_week)
+        rows_written = load_weekly_reporting_flow(rows, target_week)
+        optional_state: State = export_weekly_eval_snapshot_flow(rows, target_week, return_state=True)
         if optional_state.is_failed():
             logger.warning("Optional eval snapshot failed: %s", optional_state.message)
         record_run_status(run_id, "completed", len(events), rows_written)
@@ -264,5 +320,6 @@ def get_latest_pipeline_run() -> dict[str, Any] | None:
 
 
 if __name__ == "__main__":
+    init_db()
     logging.basicConfig(level=logging.INFO)
     weekly_office_program_performance_flow()
