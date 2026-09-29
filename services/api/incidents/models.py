@@ -171,3 +171,13 @@ class IncidentSummary(BaseModel):
     by_origin: dict[str, int]
     open_oldest: str | None = None
     open_critical_count: int = 0
+
+
+class SeedResult(BaseModel):
+    """Result of seeding incidents from CSV."""
+
+    total_rows: int
+    inserted: int
+    discarded: int
+    skipped: int
+    status: str

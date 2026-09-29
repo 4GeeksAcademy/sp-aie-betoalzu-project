@@ -65,11 +65,6 @@ async function handleResponse(res: Response) {
   return payload;
 }
 
-function getApiUrl() {
-  // Fallback al mismo origen cuando el front y la API comparten host.
-  return (API_URL || '').replace(/\/$/, '');
-}
-
 /** Merge default JSON headers with the current Authorization header. */
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return {
@@ -77,6 +72,25 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
     ...getAuthHeaders(),
     ...extra,
   };
+}
+
+/**
+ * External records API base URL (4Geeks Playground).
+ */
+const RECORDS_API_BASE = 'https://playground.4geeks.com/tracker/api/v1';
+
+/**
+ * Build the base URL for the records API.
+ * - Server-side (SSR/SSG): calls the external 4Geeks API directly
+ * - Client-side: uses the Next.js proxy route (same-origin)
+ */
+function getRecordsApiUrl(): string {
+  if (typeof window !== 'undefined') {
+    // Client-side: use Next.js proxy route for same-origin requests
+    return '/api/records';
+  }
+  // Server-side: call the external API directly
+  return RECORDS_API_BASE + '/records';
 }
 
 function extractCandidateList(data: unknown): CandidateApi[] {
@@ -99,9 +113,11 @@ function extractTotalCount(data: unknown): number | null {
 }
 
 export async function getCandidates(params?: Record<string, string>) {
+  const baseUrl = getRecordsApiUrl();
+
   if (params) {
     const query = '?' + new URLSearchParams(params).toString();
-    const res = await fetch(`${getApiUrl()}/records${query}`, {
+    const res = await fetch(`${baseUrl}${query}`, {
       cache: 'no-store',
       headers: authHeaders(),
     });
@@ -121,7 +137,7 @@ export async function getCandidates(params?: Record<string, string>) {
   while (all.length < total) {
     const query = new URLSearchParams({ page: String(page), limit: String(pageSize) }).toString();
     try {
-      const res = await fetch(`${getApiUrl()}/records?${query}`, {
+      const res = await fetch(`${baseUrl}?${query}`, {
         cache: 'no-store',
         headers: authHeaders(),
       });
@@ -147,7 +163,7 @@ export async function getCandidates(params?: Record<string, string>) {
 }
 
 export async function getCandidate(id: string) {
-  const res = await fetch(`${getApiUrl()}/records/${id}`, {
+  const res = await fetch(`${getRecordsApiUrl()}/${id}`, {
     cache: 'no-store',
     headers: authHeaders(),
   });
@@ -156,7 +172,7 @@ export async function getCandidate(id: string) {
 }
 
 export async function createCandidate(data: CandidateForm) {
-  const res = await fetch(`${getApiUrl()}/records`, {
+  const res = await fetch(`${getRecordsApiUrl()}`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(toApiPayload(data)),
@@ -166,7 +182,7 @@ export async function createCandidate(data: CandidateForm) {
 }
 
 export async function updateCandidate(id: string, data: Partial<CandidateForm>) {
-  const res = await fetch(`${getApiUrl()}/records/${id}`, {
+  const res = await fetch(`${getRecordsApiUrl()}/${id}`, {
     method: 'PUT',
     headers: authHeaders(),
     body: JSON.stringify(toApiPayload(data)),
@@ -176,7 +192,7 @@ export async function updateCandidate(id: string, data: Partial<CandidateForm>) 
 }
 
 export async function patchCandidate(id: string, data: Partial<CandidateForm>) {
-  const res = await fetch(`${getApiUrl()}/records/${id}`, {
+  const res = await fetch(`${getRecordsApiUrl()}/${id}`, {
     method: 'PATCH',
     headers: authHeaders(),
     body: JSON.stringify(toApiPayload(data)),
@@ -186,7 +202,7 @@ export async function patchCandidate(id: string, data: Partial<CandidateForm>) {
 }
 
 export async function getNotes(candidateId: string) {
-  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes`, {
+  const res = await fetch(`${getRecordsApiUrl()}/${candidateId}/notes`, {
     cache: 'no-store',
     headers: authHeaders(),
   });
@@ -198,16 +214,21 @@ export async function getNotes(candidateId: string) {
 }
 
 export async function addNote(candidateId: string, content: string) {
-  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes`, {
+  const res = await fetch(`${getRecordsApiUrl()}/${candidateId}/notes`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify({ content }),
   });
-  return handleResponse(res) as Promise<Note>;
+  const responseData = await handleResponse(res);
+  // Some APIs wrap the created note in { data: Note }
+  if (responseData && typeof responseData === 'object' && 'data' in responseData) {
+    return (responseData as { data: Note }).data;
+  }
+  return responseData as Note;
 }
 
 export async function deleteNote(candidateId: string, noteId: string) {
-  const res = await fetch(`${getApiUrl()}/records/${candidateId}/notes/${noteId}`, {
+  const res = await fetch(`${getRecordsApiUrl()}/${candidateId}/notes/${noteId}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });

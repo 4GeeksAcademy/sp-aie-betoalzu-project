@@ -1,9 +1,16 @@
+import dynamic from 'next/dynamic';
 import { getCandidates } from '@/services/api';
 import type { Candidate } from '@/types/candidate';
-import CandidateTable from '@/components/CandidateTable';
-import CandidateFilters from '@/components/CandidateFilters';
 import Link from 'next/link';
 import { STATUS_LABELS, STAGE_LABELS } from '@/types/labels';
+
+const CandidateTable = dynamic(() => import('@/components/CandidateTable'), {
+  loading: () => <div className="py-10 text-center text-sm text-slate-400">Cargando tabla de candidatos...</div>,
+});
+
+const CandidateFilters = dynamic(() => import('@/components/CandidateFilters'), {
+  loading: () => <div className="py-3 text-center text-sm text-slate-400">Cargando filtros...</div>,
+});
 
 type HomePageProps = {
   searchParams?: Promise<{

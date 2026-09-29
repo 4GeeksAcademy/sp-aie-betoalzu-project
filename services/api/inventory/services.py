@@ -6,6 +6,7 @@ from typing import Any
 
 from tinydb import TinyDB, Query
 
+from services.cache import backend_cache
 from services.schemas import (
     AssetCreate,
     AssetUpdate,
@@ -17,7 +18,38 @@ from services.schemas import (
     OrderResponse,
     Office,
     ExitType,
+    Currency,
+    Program,
+    AssetCategory,
 )
+
+
+# ---------------------------------------------------------------------------
+# Helpers: auto-assign currency & program
+# ---------------------------------------------------------------------------
+
+
+def _derive_currency(office: str) -> str:
+    """USD para Miami, EUR para Valencia."""
+    if office == "Miami":
+        return "USD"
+    return "EUR"
+
+
+def _derive_program(category: str) -> str | None:
+    """Asigna programa según la categoría.
+
+    - 'training_materials' → 'formación de liderazgo'
+    - 'certification'     → 'ventas B2B'
+    - 'onboarding_equipment' → 'Onboarding'
+    - Otras categorías → None
+    """
+    program_map = {
+        AssetCategory.TRAINING_MATERIALS.value: Program.LEADERSHIP_TRAINING.value,
+        AssetCategory.CERTIFICATION.value: Program.B2B_SALES.value,
+        AssetCategory.ONBOARDING_EQUIPMENT.value: Program.ONBOARDING.value,
+    }
+    return program_map.get(category)
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
 _INVENTORY_DB_PATH = _ROOT_DIR / "data" / "inventory_db.json"
@@ -43,39 +75,43 @@ def _open_tables():
 # ---------------------------------------------------------------------------
 
 
-def _serialize_asset(doc: dict) -> dict:
-    return {
-        "id": doc.doc_id,
-        "name": doc["name"],
-        "sku": doc["sku"],
-        "category": doc["category"],
-        "office": doc["office"],
-    }
+def _serialize_asset(doc: dict) -> AssetResponse:
+    return AssetResponse(
+        id=doc.doc_id,
+        name=doc["name"],
+        sku=doc["sku"],
+        category=doc["category"],
+        office=doc["office"],
+        currency=doc.get("currency", _derive_currency(doc["office"])),
+        unit_cost=doc.get("unit_cost"),
+        program=doc.get("program"),
+        current_stock=compute_current_stock(doc.doc_id),
+    )
 
 
-def _serialize_entry(doc: dict) -> dict:
-    return {
-        "id": doc.doc_id,
-        "asset_id": doc["asset_id"],
-        "quantity": doc["quantity"],
-        "supplier": doc["supplier"],
-        "office": doc["office"],
-        "created_at": doc["created_at"],
-        "user_uuid": doc["user_uuid"],
-    }
+def _serialize_entry(doc: dict) -> AssetEntryResponse:
+    return AssetEntryResponse(
+        id=doc.doc_id,
+        asset_id=doc["asset_id"],
+        quantity=doc["quantity"],
+        supplier=doc["supplier"],
+        office=doc["office"],
+        created_at=doc["created_at"],
+        user_uuid=doc["user_uuid"],
+    )
 
 
-def _serialize_exit(doc: dict) -> dict:
-    return {
-        "id": doc.doc_id,
-        "asset_id": doc["asset_id"],
-        "quantity": doc["quantity"],
-        "exit_type": doc["exit_type"],
-        "assigned_to": doc.get("assigned_to"),
-        "office": doc["office"],
-        "created_at": doc["created_at"],
-        "user_uuid": doc["user_uuid"],
-    }
+def _serialize_exit(doc: dict) -> AssetExitResponse:
+    return AssetExitResponse(
+        id=doc.doc_id,
+        asset_id=doc["asset_id"],
+        quantity=doc["quantity"],
+        exit_type=doc["exit_type"],
+        assigned_to=doc.get("assigned_to"),
+        office=doc["office"],
+        created_at=doc["created_at"],
+        user_uuid=doc["user_uuid"],
+    )
 
 
 def compute_current_stock(asset_id: int) -> int:
@@ -103,7 +139,7 @@ def compute_current_stock(asset_id: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def create_asset(payload: AssetCreate) -> dict:
+def create_asset(payload: AssetCreate) -> AssetResponse:
     db, assets_table, _, _ = _open_tables()
     try:
         AssetQ = Query()
@@ -112,40 +148,48 @@ def create_asset(payload: AssetCreate) -> dict:
             raise ValueError(f"Asset with SKU '{payload.sku}' already exists.")
 
         doc_data = payload.model_dump(mode="json")
+        # Auto-assign currency from office if not provided
+        if not doc_data.get("currency"):
+            doc_data["currency"] = _derive_currency(payload.office.value)
+        # Auto-assign program from category if not provided
+        if not doc_data.get("program"):
+            doc_data["program"] = _derive_program(payload.category.value)
+
         doc_id = assets_table.insert(doc_data)
         doc = assets_table.get(doc_id=doc_id)
+        backend_cache.invalidate_tags(["inventory_assets", "inventory_orders"])
         return _serialize_asset(doc)
     finally:
         db.close()
 
 
-def list_assets() -> list[dict]:
-    db, assets_table, _, _ = _open_tables()
-    try:
-        results = []
-        for doc in assets_table.all():
-            asset = _serialize_asset(doc)
-            asset["current_stock"] = compute_current_stock(doc.doc_id)
-            results.append(asset)
-        return results
-    finally:
-        db.close()
+def list_assets() -> list[AssetResponse]:
+    @backend_cache.cached(ttl=120, tags=["inventory_assets"])
+    def _fetch() -> list[AssetResponse]:
+        db, assets_table, _, _ = _open_tables()
+        try:
+            results = []
+            for doc in assets_table.all():
+                asset = _serialize_asset(doc)
+                results.append(asset)
+            return results
+        finally:
+            db.close()
+    return _fetch()
 
 
-def get_asset(asset_id: int) -> dict | None:
+def get_asset(asset_id: int) -> AssetResponse | None:
     db, assets_table, _, _ = _open_tables()
     try:
         doc = assets_table.get(doc_id=asset_id)
         if doc is None:
             return None
-        asset = _serialize_asset(doc)
-        asset["current_stock"] = compute_current_stock(doc.doc_id)
-        return asset
+        return _serialize_asset(doc)
     finally:
         db.close()
 
 
-def update_asset(asset_id: int, payload: AssetUpdate) -> dict | None:
+def update_asset(asset_id: int, payload: AssetUpdate) -> AssetResponse | None:
     db, assets_table, _, _ = _open_tables()
     try:
         doc = assets_table.get(doc_id=asset_id)
@@ -156,11 +200,18 @@ def update_asset(asset_id: int, payload: AssetUpdate) -> dict | None:
         if not update_data:
             return _serialize_asset(doc)
 
+        # Re-derive currency if office changed
+        if "office" in update_data:
+            update_data["currency"] = _derive_currency(update_data["office"])
+
+        # Re-derive program if category changed
+        if "category" in update_data:
+            update_data["program"] = _derive_program(update_data["category"])
+
         assets_table.update(update_data, doc_ids=[asset_id])
         updated = assets_table.get(doc_id=asset_id)
-        asset = _serialize_asset(updated)
-        asset["current_stock"] = compute_current_stock(asset_id)
-        return asset
+        backend_cache.invalidate_tags(["inventory_assets", "inventory_orders"])
+        return _serialize_asset(updated)
     finally:
         db.close()
 
@@ -170,7 +221,7 @@ def update_asset(asset_id: int, payload: AssetUpdate) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-def create_entry(payload: AssetEntryCreate, user_uuid: str) -> dict:
+def create_entry(payload: AssetEntryCreate, user_uuid: str) -> AssetEntryResponse:
     db, assets_table, entries_table, _ = _open_tables()
     try:
         doc = assets_table.get(doc_id=payload.asset_id)
@@ -182,6 +233,7 @@ def create_entry(payload: AssetEntryCreate, user_uuid: str) -> dict:
         doc_data["created_at"] = _utc_now_str()
         doc_id = entries_table.insert(doc_data)
         created = entries_table.get(doc_id=doc_id)
+        backend_cache.invalidate_tags(["inventory_orders", "inventory_assets"])
         return _serialize_entry(created)
     finally:
         db.close()
@@ -192,7 +244,7 @@ def create_entry(payload: AssetEntryCreate, user_uuid: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def create_exit(payload: AssetExitCreate, user_uuid: str) -> dict:
+def create_exit(payload: AssetExitCreate, user_uuid: str) -> AssetExitResponse:
     db, assets_table, entries_table, exits_table = _open_tables()
     try:
         # Check asset exists
@@ -225,6 +277,7 @@ def create_exit(payload: AssetExitCreate, user_uuid: str) -> dict:
         doc_data["created_at"] = _utc_now_str()
         doc_id = exits_table.insert(doc_data)
         created = exits_table.get(doc_id=doc_id)
+        backend_cache.invalidate_tags(["inventory_orders", "inventory_assets"])
         return _serialize_exit(created)
     finally:
         db.close()
@@ -236,6 +289,12 @@ def create_exit(payload: AssetExitCreate, user_uuid: str) -> dict:
 
 
 def list_orders() -> list[dict]:
+    """Return the latest inventory orders without serving stale in-memory cache.
+
+    The inventory history needs to reflect the current TinyDB state immediately; an
+    in-memory TTL cache can otherwise keep returning an old empty list even after a
+    successful reseed or new inbound/outbound creation.
+    """
     db, assets_table, entries_table, exits_table = _open_tables()
     try:
         results = []
@@ -278,6 +337,7 @@ def list_orders() -> list[dict]:
                 ).model_dump(mode="json")
             )
 
+        results.sort(key=lambda r: r["created_at"], reverse=True)
         return results
     finally:
         db.close()

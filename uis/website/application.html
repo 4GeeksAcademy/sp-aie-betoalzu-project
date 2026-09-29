@@ -9,48 +9,12 @@
     />
     <title>Aplicación | Nexova Solutions</title>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Tailwind CSS v4 compilado localmente -->
+    <link rel="stylesheet" href="dist/styles.css" />
 
-    <style type="text/tailwindcss">
-      :root {
-        --color-brand: #0f766e;
-        --color-brand-dark: #115e59;
-        --color-accent: #f59e0b;
-        --color-surface: #f8fafc;
-      }
-
-      @layer utilities {
-        .bg-brand {
-          background-color: var(--color-brand);
-        }
-
-        .bg-brand-dark {
-          background-color: var(--color-brand-dark);
-        }
-
-        .text-brand {
-          color: var(--color-brand);
-        }
-
-        .text-accent {
-          color: var(--color-accent);
-        }
-
-        .bg-surface {
-          background-color: var(--color-surface);
-        }
-
-        .ring-brand {
-          --tw-ring-color: var(--color-brand);
-        }
-
-        .bg-grid {
-          background-image:
-            linear-gradient(to right, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
-          background-size: 32px 32px;
-        }
-      }
+    <style>
+      @layer theme, base, components, utilities;
+      /* Custom styles for form — already defined in compiled Tailwind theme */
     </style>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -68,6 +32,9 @@
             src="https://images.unsplash.com/photo-1560179707-f14e90ef3623?q=80&w=120&auto=format&fit=crop"
             alt="Logotipo de Nexova Solutions"
             class="h-10 w-10 rounded-full object-cover"
+            loading="eager"
+            width="40"
+            height="40"
           />
           <span class="text-lg font-extrabold tracking-tight text-brand">Nexova Solutions</span>
         </a>

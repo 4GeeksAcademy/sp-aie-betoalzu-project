@@ -7,7 +7,7 @@ from typing import Any
 import bcrypt
 from tinydb import TinyDB, Query
 
-from services.api.users.models import UserCreate, UserUpdate, UserInDB, Role
+from services.api.users.models import UserCreate, UserUpdate, UserInDB, UserOut, Role
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
 _USERS_DB_PATH = _ROOT_DIR / "data" / "users_db.json"
@@ -28,16 +28,16 @@ def _open_users_table():
     return db, db.table("users")
 
 
-def _serialize_user(doc: dict) -> dict:
-    """Convert a TinyDB document into a safe response dict (no password)."""
-    return {
-        "id": doc.doc_id,
-        "email": doc["email"],
-        "is_active": doc.get("is_active", True),
-        "role": doc.get("role", Role.USER.value),
-        "created_at": doc.get("created_at", ""),
-        "profile": doc.get("profile"),
-    }
+def _serialize_user(doc: dict) -> UserOut:
+    """Convert a TinyDB document into a safe UserOut."""
+    return UserOut(
+        id=doc.doc_id,
+        email=doc["email"],
+        is_active=doc.get("is_active", True),
+        role=Role(doc.get("role", Role.USER.value)),
+        created_at=doc.get("created_at", ""),
+        profile=doc.get("profile"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ def _serialize_user(doc: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def create_user(payload: UserCreate) -> dict:
+def create_user(payload: UserCreate) -> UserOut:
     """Create a user with hashed password + optional linked profile.
 
     Returns the serialized user (without password).
@@ -79,7 +79,7 @@ def create_user(payload: UserCreate) -> dict:
         db.close()
 
 
-def get_user_by_id(user_id: int) -> dict | None:
+def get_user_by_id(user_id: int) -> UserOut | None:
     """Return serialized user by doc id, or None."""
     db, table = _open_users_table()
     try:
@@ -113,7 +113,7 @@ def get_user_by_email(email: str) -> UserInDB | None:
         db.close()
 
 
-def list_users() -> list[dict]:
+def list_users() -> list[UserOut]:
     """Return all users (serialized, no passwords)."""
     db, table = _open_users_table()
     try:
@@ -122,7 +122,7 @@ def list_users() -> list[dict]:
         db.close()
 
 
-def update_user(user_id: int, payload: UserUpdate) -> dict | None:
+def update_user(user_id: int, payload: UserUpdate) -> UserOut | None:
     """Update credential / status fields.
 
     Returns the updated serialized user, or None if not found.

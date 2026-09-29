@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
+from sqlalchemy import Column, Index
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
 
 
@@ -24,6 +28,9 @@ class Asset(SQLModel, table=True):
     sku: str = Field(min_length=1, max_length=50, unique=True, index=True)
     category: str = Field(max_length=50)  # "hardware" | "peripherals" | "office_supplies" | "training_materials"
     office: str = Field(max_length=50)    # "Valencia" | "Miami"
+    currency: str = Field(max_length=3)    # "USD" | "EUR"
+    unit_cost: float | None = Field(default=None, description="Coste unitario del producto")
+    program: str | None = Field(default=None, max_length=100, description="Programa asociado (ventas B2B, Onboarding, formación de liderazgo)")
 
 
 # ---------------------------------------------------------------------------
@@ -75,3 +82,28 @@ class AssetExit(SQLModel, table=True):
         max_length=100,
         description="UUID del responsable que registró la salida (de TinyDB)",
     )
+
+
+class TelemetryEventRecord(SQLModel, table=True):
+    """Evento de telemetría inmutable almacenado para análisis."""
+
+    __tablename__ = "telemetry_events"  # type: ignore[misc]
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    timestamp: datetime = Field(index=True)
+    service: str
+    event_type: str = Field(index=True)
+    level: str = Field(default="info")
+    value: float | None = Field(default=None)
+    message: str | None = Field(default=None)
+    tags: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSON().with_variant(JSONB(), "postgresql"), nullable=False),
+    )
+
+
+Index(
+    "ix_telemetry_events_tags_gin",
+    TelemetryEventRecord.tags,
+    postgresql_using="gin",
+)

@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #0f766e;
+  --color-brand-dark: #115e59;
+  --color-accent: #f59e0b;
+  --color-surface: #f8fafc;
+  --font-display: "Outfit", "Segoe UI", sans-serif;
+}
+
+@layer utilities {
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+}

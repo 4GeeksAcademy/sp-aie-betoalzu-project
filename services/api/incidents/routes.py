@@ -27,6 +27,7 @@ from services.api.incidents.models import (
     IncidentStatus,
     IncidentUpdate,
     IncidentStatusUpdate,
+    SeedResult,
 )
 from services.api.incidents.services import (
     create_incident,
@@ -169,13 +170,13 @@ def _transform_csv_row(row: dict) -> dict | None:
     }
 
 
-def _seed_from_csv(file_path: Path) -> dict:
+def _seed_from_csv(file_path: Path) -> SeedResult:
     """Read a CSV file, transform rows, and bulk-insert into TinyDB.
 
-    Clears existing data before seeding. Returns a dict with seed statistics.
+    Clears existing data before seeding. Returns a SeedResult with seed statistics.
     """
     if not file_path.exists():
-        return {"error": f"CSV file not found: {file_path}"}
+        raise FileNotFoundError(f"CSV file not found: {file_path}")
 
     content = file_path.read_bytes()
     # Handle BOM
@@ -184,7 +185,7 @@ def _seed_from_csv(file_path: Path) -> dict:
 
     reader = csv.DictReader(io.StringIO(content.decode("utf-8")))
     if reader.fieldnames is None:
-        return {"error": "CSV file has no headers."}
+        raise ValueError("CSV file has no headers.")
 
     # Clear previous data
     clear_all_incidents()
@@ -204,13 +205,13 @@ def _seed_from_csv(file_path: Path) -> dict:
         bulk_insert_incidents([transformed])
         inserted += 1
 
-    return {
-        "total_rows": total_rows,
-        "inserted": inserted,
-        "discarded": discarded,
-        "skipped": skipped,
-        "status": "ok",
-    }
+    return SeedResult(
+        total_rows=total_rows,
+        inserted=inserted,
+        discarded=discarded,
+        skipped=skipped,
+        status="ok",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +261,7 @@ def incidents_summary(
 ):
     """Return aggregated summary statistics."""
     try:
-        return get_summary()
+        return get_summary().model_dump(mode="json")
     except Exception:
         return _json_error("Error al obtener el resumen de incidencias.", 500)
 
@@ -273,10 +274,11 @@ def seed_incidents_from_csv(
 
     Transforms CSV fields into the Nexova incident model.
     """
-    result = _seed_from_csv(_CSV_PATH)
-    if "error" in result:
-        return _json_error(result["error"], 500)
-    return result
+    try:
+        result = _seed_from_csv(_CSV_PATH)
+        return result.model_dump(mode="json")
+    except (FileNotFoundError, ValueError) as exc:
+        return _json_error(str(exc), 500)
 
 
 @incidents_api.get("/api/incidents/{incident_id}")

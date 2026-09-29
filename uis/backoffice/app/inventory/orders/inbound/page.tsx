@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createInboundOrder } from '@/lib/inventory';
 import { getStoredToken } from '@/lib/auth-token';
@@ -14,7 +14,7 @@ const initialForm = {
   office: 'Valencia' as Office,
 };
 
-export default function InboundOrderPage() {
+function InboundOrderForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -184,5 +184,13 @@ export default function InboundOrderPage() {
         </form>
       </div>
     </main>
+  );
+}
+
+export default function InboundOrderPage() {
+  return (
+    <Suspense>
+      <InboundOrderForm />
+    </Suspense>
   );
 }

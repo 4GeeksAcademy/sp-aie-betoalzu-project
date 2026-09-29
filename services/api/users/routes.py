@@ -253,7 +253,7 @@ def register_user(payload: UserCreate):
     """
     try:
         result = create_user(payload)
-        return result
+        return result.model_dump(mode="json")
     except ValueError as exc:
         return _json_error(str(exc), 409)
 
@@ -261,7 +261,7 @@ def register_user(payload: UserCreate):
 @users_api.get("/users")
 def get_all_users(current_user: UserInDB = Depends(get_current_user)):
     """List all users (protected)."""
-    return list_users()
+    return [u.model_dump(mode="json") for u in list_users()]
 
 
 @users_api.get("/users/{user_id}")
@@ -270,7 +270,7 @@ def get_user(user_id: int, current_user: UserInDB = Depends(get_current_user)):
     user = get_user_by_id(user_id)
     if user is None:
         return _json_error("User not found.", 404)
-    return user
+    return user.model_dump(mode="json")
 
 
 @users_api.put("/users/{user_id}")
@@ -296,7 +296,7 @@ def update_user_endpoint(
         updated = update_user(user_id, payload)
         if updated is None:
             return _json_error("User not found.", 404)
-        return updated
+        return updated.model_dump(mode="json")
     except ValueError as exc:
         return _json_error(str(exc), 409)
 

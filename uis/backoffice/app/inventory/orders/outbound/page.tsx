@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createOutboundOrder, fetchProduct } from '@/lib/inventory';
 import { getStoredToken } from '@/lib/auth-token';
@@ -15,7 +15,7 @@ const initialForm = {
   office: 'Valencia' as Office,
 };
 
-export default function OutboundOrderPage() {
+function OutboundOrderForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -279,5 +279,13 @@ export default function OutboundOrderPage() {
         </form>
       </div>
     </main>
+  );
+}
+
+export default function OutboundOrderPage() {
+  return (
+    <Suspense>
+      <OutboundOrderForm />
+    </Suspense>
   );
 }

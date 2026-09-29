@@ -1,0 +1,143 @@
+import logging
+import os
+from datetime import datetime
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy import insert
+from sqlmodel import Session
+
+from services.cache import backend_cache
+from services.database import get_db
+from services.models import TelemetryEventRecord
+from services.telemetry.analysis import build_operational_report, default_window
+
+TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_ENDPOINT", "http://localhost:8000/telemetry/events")
+logger = logging.getLogger(__name__)
+
+telemetry_api = APIRouter(prefix="/telemetry")
+
+
+class TelemetryEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    eventId: str = Field(..., description="UUID v4 for the specific event")
+    timestamp: str = Field(..., description="ISO 8601 UTC timestamp")
+    sessionId: str = Field(..., description="User session UUID v4")
+    userId: str = Field(..., description="Internal user identifier")
+    event_type: str = Field(..., description="Telemetry event name in snake_case")
+    schemaVersion: str = Field(..., description="Telemetry schema version")
+    requestId: str = Field(..., description="Correlation ID for this event")
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class TelemetryBatchRequest(BaseModel):
+    events: list[dict[str, Any]] = Field(default_factory=list)
+
+
+ALLOWED_TAG_KEYS = {
+    "office", "product_id", "product_category", "programme_id", "quantity", "currency",
+    "unit_cost", "supplier_id", "inbound_order_id", "outbound_order_id", "recipient_type",
+    "current_stock", "minimum_threshold", "attempted_change", "rejection_reason",
+    "variance_percent", "historical_unit_cost", "login_method", "failure_reason", "attempt_count",
+    "expiry_reason", "session_duration_seconds", "reset_method", "user_identified", "endpoint",
+    "http_method", "http_status", "latency_ms", "page_name", "load_time_ms", "error_type",
+    "error_message", "flow_type", "abandoned_step", "total_steps", "cancellation_reason",
+    "report_type", "format", "expected_delivery_date", "actual_delivery_date",
+}
+
+ERROR_EVENT_TYPES = {"api_error_returned", "frontend_error_captured", "login_failed"}
+
+
+def _to_record(event: TelemetryEvent) -> dict[str, Any]:
+    properties = {
+        key: value for key, value in event.properties.items() if key in ALLOWED_TAG_KEYS
+    }
+    value = properties.get("value")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        value = properties.get("unit_cost")
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        value = None
+
+    timestamp = datetime.fromisoformat(event.timestamp.replace("Z", "+00:00"))
+    return {
+        "timestamp": timestamp,
+        "service": "backoffice",
+        "event_type": event.event_type,
+        "level": "error" if event.event_type in ERROR_EVENT_TYPES else "info",
+        "value": value,
+        "message": properties.get("message") if isinstance(properties.get("message"), str) else None,
+        "tags": properties,
+    }
+
+
+@telemetry_api.post("/events", status_code=200)
+def receive_telemetry_events(
+    payload: TelemetryBatchRequest,
+    db: Session = Depends(get_db),
+):
+    """Validate each event and persist the valid portion of a telemetry batch."""
+    records = []
+    rejected = 0
+    for raw_event in payload.events:
+        try:
+            records.append(_to_record(TelemetryEvent.model_validate(raw_event)))
+        except (ValidationError, ValueError, TypeError):
+            rejected += 1
+
+    if records:
+        db.exec(insert(TelemetryEventRecord).values(records))
+        db.commit()
+
+    received = len(payload.events)
+    logger.info(
+        "Telemetry batch received: count=%s event_types=%s endpoint=%s",
+        received,
+        [record["event_type"] for record in records],
+        TELEMETRY_ENDPOINT,
+    )
+    return {"received": received, "stored": len(records), "rejected": rejected}
+
+
+def _normalize_utc_iso(value: str | None, default_value: str | None = None) -> str:
+    if value is None:
+        if default_value is None:
+            raise ValueError("A date value is required.")
+        value = default_value
+    normalized = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.now().astimezone().tzinfo)
+    return parsed.astimezone().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@telemetry_api.get("/report")
+def get_telemetry_report(
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Return the technical telemetry summary with a 60-second in-memory cache."""
+    default_start, default_end = default_window()
+    start_value = start_date or default_start
+    end_value = end_date or default_end
+
+    try:
+        start_value = _normalize_utc_iso(start_value)
+        end_value = _normalize_utc_iso(end_value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid ISO 8601 date parameter") from exc
+
+    if datetime.fromisoformat(start_value.replace("Z", "+00:00")) >= datetime.fromisoformat(end_value.replace("Z", "+00:00")):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than end_date")
+
+    cache_key = f"telemetry_report::{start_value}::{end_value}"
+    cached = backend_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    report = build_operational_report(start_value, end_value, session=db)
+    payload = {"period": {"from": start_value, "to": end_value}, "metrics": report}
+    backend_cache.set(cache_key, payload, ttl=60, tags=["telemetry_report"])
+    return payload

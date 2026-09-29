@@ -105,13 +105,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function setGroupError(groupName, message) {
-    const errorNode = document.getElementById(`error-${groupName}`);
-    if (!errorNode) return;
-
-    errorNode.textContent = message;
-  }
-
   function validateField(fieldId) {
     const field = document.getElementById(fieldId);
     const validate = validators[fieldId];
@@ -124,32 +117,47 @@ document.addEventListener("DOMContentLoaded", () => {
     return !message;
   }
 
-  function validateServices() {
-    const checked = form.querySelectorAll('input[name="services"]:checked').length;
-    const message = checked > 0 ? "" : "Selecciona al menos un servicio.";
-    setGroupError("services", message);
+  function validateCheckboxGroup(name, message) {
+    const checked = form.querySelectorAll(`input[name="${name}"]:checked`).length;
+    const valid = checked > 0;
+    const errorNode = document.getElementById(`error-${name}`);
+    if (errorNode) errorNode.textContent = valid ? "" : message;
+    return valid;
+  }
 
-    return !message;
+  function validateSingleCheckbox(id, message) {
+    const field = document.getElementById(id);
+    const errorNode = document.getElementById(`error-${id}`);
+    if (!field || !errorNode) return true;
+    const valid = field.checked;
+    errorNode.textContent = valid ? "" : message;
+    return valid;
+  }
+
+  function setupFieldValidation(fieldIds) {
+    fieldIds.forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      field.addEventListener("input", () => {
+        hideSuccess();
+        validateField(id);
+      });
+      field.addEventListener("blur", () => {
+        validateField(id);
+      });
+    });
+  }
+
+  function validateServices() {
+    return validateCheckboxGroup("services", "Selecciona al menos un servicio.");
   }
 
   function validatePriorityArea() {
-    const selected = form.querySelector('input[name="priorityArea"]:checked');
-    const message = selected ? "" : "Selecciona un area prioritaria.";
-    setGroupError("priorityArea", message);
-
-    return !message;
+    return validateCheckboxGroup("priorityArea", "Selecciona un area prioritaria.");
   }
 
   function validatePrivacyConsent() {
-    const field = document.getElementById("privacyConsent");
-    const errorNode = document.getElementById("error-privacyConsent");
-
-    if (!field || !errorNode) return true;
-
-    const message = field.checked ? "" : "Debes aceptar el tratamiento de datos para continuar.";
-    errorNode.textContent = message;
-
-    return !message;
+    return validateSingleCheckbox("privacyConsent", "Debes aceptar el tratamiento de datos para continuar.");
   }
 
   function validateAll() {
@@ -169,33 +177,8 @@ document.addEventListener("DOMContentLoaded", () => {
     successMessage.classList.add("hidden");
   }
 
-  requiredFieldIds.forEach((id) => {
-    const field = document.getElementById(id);
-    if (!field) return;
-
-    field.addEventListener("input", () => {
-      hideSuccess();
-      validateField(id);
-    });
-
-    field.addEventListener("blur", () => {
-      validateField(id);
-    });
-  });
-
-  ["jobTitle", "companyWebsite"].forEach((id) => {
-    const field = document.getElementById(id);
-    if (!field) return;
-
-    field.addEventListener("input", () => {
-      hideSuccess();
-      validateField(id);
-    });
-
-    field.addEventListener("blur", () => {
-      validateField(id);
-    });
-  });
+  setupFieldValidation(requiredFieldIds);
+  setupFieldValidation(["jobTitle", "companyWebsite"]);
 
   form.querySelectorAll('input[name="services"]').forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
@@ -241,8 +224,10 @@ document.addEventListener("DOMContentLoaded", () => {
       "companyWebsite",
     ].forEach((id) => setFieldError(id, ""));
 
-    setGroupError("services", "");
-    setGroupError("priorityArea", "");
+    const servicesError = document.getElementById("error-services");
+    if (servicesError) servicesError.textContent = "";
+    const priorityError = document.getElementById("error-priorityArea");
+    if (priorityError) priorityError.textContent = "";
     const privacyError = document.getElementById("error-privacyConsent");
     if (privacyError) privacyError.textContent = "";
 
@@ -257,8 +242,10 @@ document.addEventListener("DOMContentLoaded", () => {
       "companyWebsite",
     ].forEach((id) => setFieldError(id, ""));
 
-    setGroupError("services", "");
-    setGroupError("priorityArea", "");
+    const servicesError = document.getElementById("error-services");
+    if (servicesError) servicesError.textContent = "";
+    const priorityError = document.getElementById("error-priorityArea");
+    if (priorityError) priorityError.textContent = "";
 
     const privacyError = document.getElementById("error-privacyConsent");
     if (privacyError) privacyError.textContent = "";

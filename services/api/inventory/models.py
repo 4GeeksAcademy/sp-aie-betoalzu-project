@@ -21,11 +21,24 @@ class AssetCategory(str, Enum):
     PERIPHERALS = "peripherals"
     OFFICE_SUPPLIES = "office_supplies"
     TRAINING_MATERIALS = "training_materials"
+    CERTIFICATION = "certification"
+    ONBOARDING_EQUIPMENT = "onboarding_equipment"
 
 
 class Office(str, Enum):
     VALENCIA = "Valencia"
     MIAMI = "Miami"
+
+
+class Currency(str, Enum):
+    USD = "USD"
+    EUR = "EUR"
+
+
+class Program(str, Enum):
+    B2B_SALES = "ventas B2B"
+    ONBOARDING = "Onboarding"
+    LEADERSHIP_TRAINING = "formación de liderazgo"
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +53,9 @@ class AssetBase(BaseModel):
     sku: str = Field(min_length=1, description="Código único, ej.: NXV-IT-001")
     category: AssetCategory
     office: Office
+    currency: Currency
+    unit_cost: float | None = Field(default=None, description="Coste unitario del producto")
+    program: str | None = Field(default=None, description="Programa asociado asignado según categoría")
 
 
 class AssetCreate(AssetBase):
@@ -53,6 +69,9 @@ class AssetUpdate(BaseModel):
     sku: str | None = Field(default=None, min_length=1)
     category: AssetCategory | None = None
     office: Office | None = None
+    currency: Currency | None = None
+    unit_cost: float | None = None
+    program: str | None = None
 
 
 class AssetResponse(AssetBase):

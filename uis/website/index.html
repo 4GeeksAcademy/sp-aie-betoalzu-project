@@ -9,28 +9,18 @@
     />
     <title>Nexova Solutions | Talento, Formación y Soporte con IA</title>
 
-    <!-- Tailwind CSS v4 (browser build) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Tailwind CSS v4 compilado localmente -->
+    <link rel="stylesheet" href="dist/styles.css" />
 
-    <style type="text/tailwindcss">
-       @theme {
-        --color-brand: #0f766e;
-        --color-brand-dark: #115e59;
-        --color-accent: #f59e0b;
-        --color-surface: #f8fafc;
-        --font-display: "Outfit", "Segoe UI", sans-serif;
-      }
-
-      @layer utilities {
-        .bg-grid {
-          background-image:
-            linear-gradient(to right, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
-          background-size: 32px 32px;
-        }
-      }
+    <style>
+      @layer theme, base, components, utilities;
+      /* Custom utilities inline (add overrides here if needed) */
     </style>
 
+    <!-- Preload LCP hero image for fast Largest Contentful Paint -->
+    <link rel="preload" as="image" href="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1200&auto=format&fit=crop" fetchpriority="high">
+
+    <!-- Preconnect to Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -71,6 +61,9 @@
             src="https://images.unsplash.com/photo-1560179707-f14e90ef3623?q=80&w=120&auto=format&fit=crop"
             alt="Logotipo de Nexova Solutions"
             class="h-10 w-10 rounded-full object-cover"
+            loading="eager"
+            width="40"
+            height="40"
           />
           <span class="font-[Outfit] text-lg font-extrabold tracking-tight text-brand">Nexova Solutions</span>
         </a>
@@ -135,6 +128,11 @@
               src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?q=80&w=1200&auto=format&fit=crop"
               alt="Equipo profesional colaborando frente a un panel de métricas"
               class="h-[280px] w-full rounded-2xl object-cover sm:h-[360px]"
+              fetchpriority="high"
+              loading="eager"
+              decoding="sync"
+              width="1200"
+              height="600"
             />
             <figcaption class="px-2 py-3 text-sm text-slate-600">
               Operaciones de talento conectadas en tiempo real.

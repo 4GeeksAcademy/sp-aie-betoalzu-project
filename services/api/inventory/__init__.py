@@ -7,6 +7,8 @@ from services.schemas import (
     AssetExitCreate,
     AssetExitResponse,
     OrderResponse,
+    Currency,
+    Program,
 )
 
 __all__ = [
@@ -18,4 +20,6 @@ __all__ = [
     "AssetExitCreate",
     "AssetExitResponse",
     "OrderResponse",
+    "Currency",
+    "Program",
 ]

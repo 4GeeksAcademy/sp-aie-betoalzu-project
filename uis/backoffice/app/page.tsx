@@ -21,6 +21,11 @@ const tools = [
     description: 'Consulta, crea, actualiza y elimina proveedores con seguimiento de estado activo o suspendido.',
     href: '/suppliers',
   },
+  {
+    name: 'Telemetría técnica',
+    description: 'Consulta el reporte operativo del sistema: volumen, error rate y tasa de fallos de autenticación por día.',
+    href: '/telemetry',
+  },
 ];
 
 export default function BackofficeHomePage() {
