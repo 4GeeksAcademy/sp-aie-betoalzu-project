@@ -65,3 +65,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 4. Consolidar tipos compartidos y actualizar la documentacion de ejecucion de cada aplicacion.
 5. Ejecutar lint, build y suites backend/frontend antes de cualquier release.
 
+## Avance de pipeline de reporting
+
+- Rama `feat/reporting-pipeline-subflows-dashboard`: el flow semanal ahora separa extracción, transformación, carga y exportación opcional en subflows Prefect con inputs/outputs explícitos.
+- Se añadieron tasks aisladas para los cuatro KPIs y `tests/pipelines/test_pipeline.py`; la suite focalizada termina en `4 passed`.
+- Se añadió el dashboard `/reporting` del backoffice, conectado a la API semanal y enlazado desde la navegación.
+- El CLI del pipeline se validó en SQLite local tras inicializar el esquema SQLModel; el build del backoffice reconoce la nueva ruta.
+
