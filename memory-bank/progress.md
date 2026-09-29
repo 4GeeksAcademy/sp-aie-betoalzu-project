@@ -77,4 +77,5 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Implementados el modelo `job_runs` y el servicio transaccional para estados `pending`, `processing`, `completed` y `failed`, con índice único parcial para impedir dos locks `processing` por job y fecha.
 - Implementados `scripts/nightly_export.py`, exportación CSV UTC determinista, ejecución del entry point existente `data/pipelines/pipeline.py`, documentación de cron y pruebas focalizadas.
 - Validación: `7 passed` para DEV-53, `2 passed` para `tests/test_telemetry_backend.py`, `pip check` sin conflictos y `py_compile` correcto. La regresión emite un warning preexistente sobre `httpx`/Starlette.
+- El prompt de DEV-53 quedó añadido a la rama y a la PR posterior mediante un commit separado.
 
