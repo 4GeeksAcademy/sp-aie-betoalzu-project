@@ -72,3 +72,8 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadió el dashboard `/reporting` del backoffice, conectado a la API semanal y enlazado desde la navegación.
 - El CLI del pipeline se validó en SQLite local tras inicializar el esquema SQLModel; el build del backoffice reconoce la nueva ruta.
 
+## DEV-53 — Script nocturno de telemetría
+
+- Implementados el modelo `job_runs` y el servicio transaccional para estados `pending`, `processing`, `completed` y `failed`, con índice único parcial para impedir dos locks `processing` por job y fecha.
+- Pendiente en esta rama: CLI `scripts/nightly_export.py`, exportación CSV UTC, pruebas focalizadas y documentación de cron.
+
