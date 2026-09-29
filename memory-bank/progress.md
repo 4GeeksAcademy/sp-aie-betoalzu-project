@@ -75,5 +75,6 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 ## DEV-53 — Script nocturno de telemetría
 
 - Implementados el modelo `job_runs` y el servicio transaccional para estados `pending`, `processing`, `completed` y `failed`, con índice único parcial para impedir dos locks `processing` por job y fecha.
-- Pendiente en esta rama: CLI `scripts/nightly_export.py`, exportación CSV UTC, pruebas focalizadas y documentación de cron.
+- Implementados `scripts/nightly_export.py`, exportación CSV UTC determinista, ejecución del entry point existente `data/pipelines/pipeline.py`, documentación de cron y pruebas focalizadas.
+- Validación: `7 passed` para DEV-53, `2 passed` para `tests/test_telemetry_backend.py`, `pip check` sin conflictos y `py_compile` correcto. La regresión emite un warning preexistente sobre `httpx`/Starlette.
 
