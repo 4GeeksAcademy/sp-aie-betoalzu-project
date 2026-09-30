@@ -78,6 +78,49 @@ ai-engineering-company-project-template/
 
 ---
 
+## Incident Analysis Worker
+
+Incident CSV analysis is queued by FastAPI and executed by an independent Celery worker. The API stores each upload under `./data/incident_analysis` (mounted into both containers) and publishes only its generated file reference to Redis. Celery results are stored in Redis for 30 days; task ownership, an idempotency summary, and terminal failures are stored in the SQLModel database.
+
+### Configuration
+
+Copy `compose.env.example` to `.env`, replace `SECRET_KEY` with a random secret, and add non-default Flower credentials:
+
+```dotenv
+FLOWER_USER=your-operator-name
+FLOWER_PASSWORD=use-a-long-random-password
+```
+
+Compose sets `REDIS_URL=redis://redis:6379/0` for the API, worker, and Flower. For processes started directly on the host, set `REDIS_URL=redis://localhost:6379/0` and `INCIDENT_UPLOAD_DIR=./data/incident_analysis`. API and worker must use the same `DATABASE_URL`; without it, Compose mounts their default SQLite database through `./data`.
+
+### Start and Stop
+
+Run the services independently:
+
+```powershell
+docker compose up -d redis
+docker compose up -d backend
+docker compose up -d worker
+docker compose up -d flower
+```
+
+Stop one process without stopping the others:
+
+```powershell
+docker compose stop backend
+docker compose stop worker
+docker compose stop flower
+docker compose stop redis
+```
+
+Redis uses AOF persistence and `maxmemory-policy noeviction`, so pending messages survive service restarts while Redis remains available. Flower is at `http://localhost:5555` and requires the configured username and password. Its worker event stream shows queued, active, completed, and failed tasks.
+
+### Task and Failure Policy
+
+`POST /api/incidents/analyze` returns `202` and a `task_id`; authenticated clients poll `GET /tasks/{task_id}` and export successful results with `GET /api/incidents/results/export?task_id=...`. Only the owner can read or export a task.
+
+The worker retries transient storage `OSError` and SQLAlchemy `OperationalError`/`InterfaceError` failures with exponential delays of 2, 4, and 8 seconds. CSV validation errors and database errors while writing the DLQ are not retried. `max_retries=3` means one initial attempt plus three retries; a retry-exhausted failure is recorded as attempt 4 in `incident_analysis_dead_letters`, keyed by `task_id`, with the complete error message and UTC timestamp. A non-retryable terminal failure is recorded as attempt 1.
+
 ## Links
 
 - [4Geeks Academy — AI Engineering](https://4geeksacademy.com/es/programas-de-carrera/ingenieria-ia)

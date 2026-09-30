@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # Relative imports because the directory name contains a hyphen,
 # making standard package imports impossible.
-from .analyzer import (  # type: ignore[import-untyped]
+from .models import (
     AGENT_PATTERN,
     INVALID_RULE_LABELS,
     REQUIRED_HEADERS,
@@ -15,6 +15,7 @@ from .analyzer import (  # type: ignore[import-untyped]
     InvalidCsvFormatError,
     analyze_csv,
     analyze_csv_stream,
+    validate_csv_file,
     build_metrics_csv,
     build_metrics_rows,
     build_summary,
@@ -34,6 +35,7 @@ __all__ = [
     "InvalidCsvFormatError",
     "AnalysisResult",
     "analyze_csv_stream",
+    "validate_csv_file",
     "analyze_csv",
     "build_summary",
     "print_report",

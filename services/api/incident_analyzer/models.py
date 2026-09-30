@@ -74,7 +74,31 @@ class AnalysisResult:
     scores: dict[int, int] = field(default_factory=dict)
 
 
-def analyze_csv_stream(text_stream: io.StringIO, source_file: str) -> AnalysisResult:
+def _read_csv_headers(reader: csv.reader) -> list[str]:
+    try:
+        raw_headers = next(reader)
+    except StopIteration as error:
+        raise EmptyFileError("El fichero CSV esta vacio o no contiene cabecera.") from error
+
+    if not raw_headers or all(not header.strip() for header in raw_headers):
+        raise EmptyFileError("El fichero CSV esta vacio o no contiene cabecera.")
+
+    headers = [header.strip() for header in raw_headers]
+    missing_headers = [header for header in REQUIRED_HEADERS if header not in headers]
+    if missing_headers:
+        raise InvalidCsvFormatError(
+            f"El fichero CSV no tiene el formato esperado. "
+            f"Faltan columnas requeridas: {', '.join(missing_headers)}"
+        )
+    return headers
+
+
+def validate_csv_file(file_path: Path) -> None:
+    with open(file_path, encoding="utf-8-sig", newline="") as csv_file:
+        _read_csv_headers(csv.reader(csv_file))
+
+
+def analyze_csv_stream(text_stream: io.TextIOBase, source_file: str) -> AnalysisResult:
     """Analyze a CSV text stream and return the analysis result.
 
     Args:
@@ -88,27 +112,8 @@ def analyze_csv_stream(text_stream: io.StringIO, source_file: str) -> AnalysisRe
         EmptyFileError: If the CSV content is empty.
         InvalidCsvFormatError: If required headers are missing.
     """
-    raw_text = text_stream.read()
-    if not raw_text.strip():
-        raise EmptyFileError("El fichero CSV esta vacio.")
-
-    # Remove BOM if present
-    if raw_text.startswith("\ufeff"):
-        raw_text = raw_text[1:]
-
-    reader = csv.reader(io.StringIO(raw_text))
-    rows = list(reader)
-
-    if not rows:
-        raise EmptyFileError("El fichero CSV esta vacio o no contiene cabecera.")
-
-    headers = [h.strip() for h in rows[0]]
-    missing_headers = [h for h in REQUIRED_HEADERS if h not in headers]
-    if missing_headers:
-        raise InvalidCsvFormatError(
-            f"El fichero CSV no tiene el formato esperado. "
-            f"Faltan columnas requeridas: {', '.join(missing_headers)}"
-        )
+    reader = csv.reader(text_stream)
+    headers = _read_csv_headers(reader)
 
     invalid_rules = IncidentInvalidRules()
     categories: dict[str, int] = {k: 0 for k in VALID_CATEGORIES}
@@ -118,7 +123,7 @@ def analyze_csv_stream(text_stream: io.StringIO, source_file: str) -> AnalysisRe
     total_records = 0
     valid_records = 0
 
-    for row_values in rows[1:]:
+    for row_values in reader:
         # Skip entirely empty rows
         if len(row_values) == 1 and row_values[0].strip() == "":
             continue
@@ -199,10 +204,8 @@ def analyze_csv(file_path: Path) -> AnalysisResult:
         EmptyFileError: If the CSV content is empty.
         InvalidCsvFormatError: If required headers are missing.
     """
-    with open(file_path, encoding="utf-8-sig") as f:
-        text_stream = io.StringIO(f.read())
-
-    return analyze_csv_stream(text_stream, file_path.name)
+    with open(file_path, encoding="utf-8-sig", newline="") as csv_file:
+        return analyze_csv_stream(csv_file, file_path.name)
 
 
 def build_summary(result: AnalysisResult) -> dict:
@@ -273,9 +276,9 @@ def print_report(result: AnalysisResult) -> None:
     print(f"{'=' * 50}\n")
 
 
-def build_metrics_rows(result: AnalysisResult) -> list[tuple[str, str | int | float]]:
+def build_metrics_rows(result: AnalysisResult | dict) -> list[tuple[str, str | int | float]]:
     """Build flat metric rows for CSV export."""
-    summary = build_summary(result)
+    summary = build_summary(result) if isinstance(result, AnalysisResult) else result
     rows: list[tuple[str, str | int | float]] = [
         ("total_records", summary["total_records"]),
         ("valid_records", summary["valid_records"]),
@@ -301,7 +304,7 @@ def build_metrics_rows(result: AnalysisResult) -> list[tuple[str, str | int | fl
     return rows
 
 
-def build_metrics_csv(result: AnalysisResult) -> str:
+def build_metrics_csv(result: AnalysisResult | dict) -> str:
     """Build a CSV string with analysis metrics."""
     rows = build_metrics_rows(result)
     body = "\n".join(f"{metric},{value}" for metric, value in rows)

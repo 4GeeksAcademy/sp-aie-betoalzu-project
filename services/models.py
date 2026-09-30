@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Column, Index, text
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
@@ -137,3 +137,31 @@ class JobRun(SQLModel, table=True):
     finished_at: datetime | None = None
     error_message: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class IncidentAnalysisTaskRecord(SQLModel, table=True):
+    __tablename__ = "incident_analysis_tasks"  # type: ignore[misc]
+
+    task_id: str = Field(primary_key=True, max_length=36)
+    owner_id: int = Field(index=True)
+    source_filename: str = Field(max_length=255)
+    result_summary: dict | None = Field(
+        default=None,
+        sa_column=Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True),
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class IncidentAnalysisDeadLetter(SQLModel, table=True):
+    __tablename__ = "incident_analysis_dead_letters"  # type: ignore[misc]
+
+    task_id: str = Field(primary_key=True, max_length=36)
+    attempt_number: int = Field(gt=0)
+    error_message: str = Field(sa_column=Column(Text, nullable=False))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )

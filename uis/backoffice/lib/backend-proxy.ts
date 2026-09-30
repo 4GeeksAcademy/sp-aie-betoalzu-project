@@ -4,13 +4,14 @@ type ProxyOptions = {
   /** Path to proxy to on the backend */
   path: string;
   /** Original RequestInit to forward */
-  init?: RequestInit;
+  init?: RequestInit & { duplex?: 'half' };
   /** Label for error messages (e.g. 'incidencias', 'inventario') */
   label?: string;
   /** Whether to forward the Authorization header from the request */
   forwardAuth?: boolean;
   /** Allow empty API_URL (falls back to localhost) — false for data APIs, true for auth */
   allowEmptyUrl?: boolean;
+  passthrough?: boolean;
 };
 
 /**
@@ -36,7 +37,7 @@ function resolveUrl(allowEmptyUrl: boolean): string {
  * Runs server-side, so internal URLs are always reachable.
  */
 export async function proxyToBackend(options: ProxyOptions): Promise<NextResponse> {
-  const { path, init, label = 'servicio', forwardAuth = false, allowEmptyUrl = false } = options;
+  const { path, init, label = 'servicio', forwardAuth = false, allowEmptyUrl = false, passthrough = false } = options;
   const backendUrl = resolveUrl(allowEmptyUrl);
 
   if (!backendUrl) {
@@ -62,6 +63,18 @@ export async function proxyToBackend(options: ProxyOptions): Promise<NextRespons
         ...(init?.headers || {}),
       },
     });
+
+    if (response.ok && passthrough) {
+      return new NextResponse(response.body, {
+        status: response.status,
+        headers: {
+          'Content-Type': response.headers.get('content-type') || 'application/octet-stream',
+          ...(response.headers.get('content-disposition')
+            ? { 'Content-Disposition': response.headers.get('content-disposition') as string }
+            : {}),
+        },
+      });
+    }
 
     const contentType = response.headers.get('content-type') || '';
     const isJson = contentType.includes('application/json');
