@@ -1,7 +1,12 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { analyzeIncidentsCsv, exportIncidentResults, CsvIncidentSummary } from '@/services/api';
+import {
+  analyzeIncidentsCsv,
+  exportIncidentResults,
+  getIncidentAnalysisTask,
+  CsvIncidentSummary,
+} from '@/services/api';
 
 const INVALID_RULE_LABELS: Record<string, string> = {
   missing_client_company: 'Falta client_company',
@@ -33,6 +38,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 export default function IncidentAnalyzerClient() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<CsvIncidentSummary | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState('');
@@ -57,9 +63,20 @@ export default function IncidentAnalyzerClient() {
     }
 
     setIsAnalyzing(true);
+    setSummary(null);
+    setTaskId(null);
     try {
-      const result = await analyzeIncidentsCsv(selectedFile);
-      setSummary(result);
+      const { task_id: queuedTaskId } = await analyzeIncidentsCsv(selectedFile);
+      setTaskId(queuedTaskId);
+      let task = await getIncidentAnalysisTask(queuedTaskId);
+      while (task.status === 'pending' || task.status === 'started') {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        task = await getIncidentAnalysisTask(queuedTaskId);
+      }
+      if (task.status === 'failure') {
+        throw new Error(task.result.error);
+      }
+      setSummary(task.result);
     } catch (err) {
       setSummary(null);
       setError(err instanceof Error ? err.message : 'No se pudo analizar el archivo.');
@@ -73,7 +90,8 @@ export default function IncidentAnalyzerClient() {
     setIsDownloading(true);
 
     try {
-      const { blob, fileName } = await exportIncidentResults();
+      if (!taskId) throw new Error('No hay un analisis completado para exportar.');
+      const { blob, fileName } = await exportIncidentResults(taskId);
       downloadBlob(blob, fileName);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo descargar el resumen.');
@@ -215,7 +233,7 @@ export default function IncidentAnalyzerClient() {
             <button
               type="button"
               onClick={onDownload}
-              disabled={isDownloading}
+              disabled={isDownloading || !taskId}
               className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isDownloading ? 'Descargando...' : 'Descargar resumen CSV'}

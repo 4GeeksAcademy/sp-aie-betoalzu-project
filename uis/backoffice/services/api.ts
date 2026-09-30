@@ -29,6 +29,11 @@ export type CsvIncidentSummary = {
   average_score: number;
 };
 
+export type IncidentAnalysisTask =
+  | { task_id: string; status: 'pending' | 'started'; result: null }
+  | { task_id: string; status: 'success'; result: CsvIncidentSummary }
+  | { task_id: string; status: 'failure'; result: { error: string } };
+
 type CandidateApi = Omit<Candidate, 'linkedin'> & {
   linkedin?: string | null;
   linkedin_url?: string | null;
@@ -242,15 +247,26 @@ export async function analyzeIncidentsCsv(file: File) {
   const res = await fetch('/api/incidents/analyze', {
     method: 'POST',
     body: form,
+    headers: getAuthHeaders(),
   });
 
-  return (await handleResponse(res)) as CsvIncidentSummary;
+  return (await handleResponse(res)) as { task_id: string };
 }
 
-export async function exportIncidentResults() {
-  const res = await fetch('/api/incidents/results/export', {
+export async function getIncidentAnalysisTask(taskId: string): Promise<IncidentAnalysisTask> {
+  const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
     method: 'GET',
     cache: 'no-store',
+    headers: getAuthHeaders(),
+  });
+  return (await handleResponse(res)) as IncidentAnalysisTask;
+}
+
+export async function exportIncidentResults(taskId: string) {
+  const res = await fetch(`/api/incidents/results/export?task_id=${encodeURIComponent(taskId)}`, {
+    method: 'GET',
+    cache: 'no-store',
+    headers: getAuthHeaders(),
   });
 
   if (!res.ok) {

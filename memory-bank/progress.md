@@ -86,4 +86,6 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Verificación focalizada: `5 passed` en `tests/test_incident_analysis.py`; queda un warning de deprecación Starlette/httpx. La validación Docker/Flower end-to-end requiere Docker activo y queda pendiente.
 - Commit backend creado: `dea0793` (`feat: queue incident analysis with Celery`).
 - Fase de infraestructura: Compose define Redis AOF con `noeviction`, worker independiente, Flower autenticado y almacenamiento compartido; `docker compose config` y aserciones de REDIS_URL, auth/puerto y volúmenes pasaron. El daemon Docker no está activo, por lo que no se inició Flower ni se comprobó consumo end-to-end.
+- Commit de infraestructura creado: `66da885` (`chore: add Redis worker and Flower services`).
+- Backoffice actualizado para enviar el CSV al backend, consultar `task_id` hasta estado terminal y exportar el resultado de esa tarea. ESLint focalizado pasó con cero errores y dos warnings existentes en `services/api.ts`; `npx tsc --noEmit` pasó.
 
