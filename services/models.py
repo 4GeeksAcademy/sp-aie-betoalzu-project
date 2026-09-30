@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, Index
+from sqlalchemy import CheckConstraint, Column, Index, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlmodel import Field, SQLModel
@@ -107,3 +107,33 @@ Index(
     TelemetryEventRecord.tags,
     postgresql_using="gin",
 )
+
+
+class JobRun(SQLModel, table=True):
+    """Orchestration record for independent background jobs."""
+
+    __tablename__ = "job_runs"  # type: ignore[misc]
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'completed', 'failed')",
+            name="ck_job_runs_status",
+        ),
+        Index("ix_job_runs_job_name_target_date", "job_name", "target_date"),
+        Index(
+            "ux_job_runs_processing",
+            "job_name",
+            "target_date",
+            unique=True,
+            sqlite_where=text("status = 'processing'"),
+            postgresql_where=text("status = 'processing'"),
+        ),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    job_name: str = Field(index=True, max_length=100)
+    target_date: date = Field(index=True)
+    status: str = Field(default="pending", max_length=20)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error_message: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
