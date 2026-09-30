@@ -89,3 +89,8 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Commit de infraestructura creado: `66da885` (`chore: add Redis worker and Flower services`).
 - Backoffice actualizado para enviar el CSV al backend, consultar `task_id` hasta estado terminal y exportar el resultado de esa tarea. ESLint focalizado pasó con cero errores y dos warnings existentes en `services/api.ts`; `npx tsc --noEmit` pasó.
 
+## Prediccion de ventas — Modelo y pruebas
+
+- Dataset mensual consolidado de 2016-2025 validado (120 meses, sin fechas ni ingresos ausentes); Random Forest entrenado en 2016-2023 con 84 objetivos de crecimiento interanual y evaluado recursivamente en 2024-2025 sin consultar ingresos futuros.
+- Se incluyeron split y features causales con 2 pruebas en `tests/pipelines/test_sales_forecast.py` (2 passed); `py_compile` correcto. MAE fuera de muestra: 52.532 USD/mes frente a 57.329 USD/mes para naive estacional.
+
