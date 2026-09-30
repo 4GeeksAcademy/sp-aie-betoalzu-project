@@ -84,4 +84,6 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Rama `feat/celery-async-incident-analysis`: el endpoint de análisis CSV guarda uploads por bloques en almacenamiento compartido y publica solo su referencia a Celery/Redis; las tareas consultables se ligan al propietario y persisten resumen y errores terminales DLQ en SQLModel.
 - El worker analiza filas CSV por streaming, devuelve el resumen serializable, reintenta errores transitorios con tres backoffs y limpia los uploads al terminar. El prompt de esta tarea se incluye en el commit de fase backend.
 - Verificación focalizada: `5 passed` en `tests/test_incident_analysis.py`; queda un warning de deprecación Starlette/httpx. La validación Docker/Flower end-to-end requiere Docker activo y queda pendiente.
+- Commit backend creado: `dea0793` (`feat: queue incident analysis with Celery`).
+- Fase de infraestructura: Compose define Redis AOF con `noeviction`, worker independiente, Flower autenticado y almacenamiento compartido; `docker compose config` y aserciones de REDIS_URL, auth/puerto y volúmenes pasaron. El daemon Docker no está activo, por lo que no se inició Flower ni se comprobó consumo end-to-end.
 
