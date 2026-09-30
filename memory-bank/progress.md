@@ -79,3 +79,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Validación: `7 passed` para DEV-53, `2 passed` para `tests/test_telemetry_backend.py`, `pip check` sin conflictos y `py_compile` correcto. La regresión emite un warning preexistente sobre `httpx`/Starlette.
 - El prompt de DEV-53 quedó añadido a la rama y a la PR posterior mediante un commit separado.
 
+## Colas Celery — Fase backend
+
+- Rama `feat/celery-async-incident-analysis`: el endpoint de análisis CSV guarda uploads por bloques en almacenamiento compartido y publica solo su referencia a Celery/Redis; las tareas consultables se ligan al propietario y persisten resumen y errores terminales DLQ en SQLModel.
+- El worker analiza filas CSV por streaming, devuelve el resumen serializable, reintenta errores transitorios con tres backoffs y limpia los uploads al terminar. El prompt de esta tarea se incluye en el commit de fase backend.
+- Verificación focalizada: `5 passed` en `tests/test_incident_analysis.py`; queda un warning de deprecación Starlette/httpx. La validación Docker/Flower end-to-end requiere Docker activo y queda pendiente.
+
