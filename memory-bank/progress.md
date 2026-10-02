@@ -80,3 +80,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - `docs/rag/configuration.md` documenta URL de Qdrant host/Compose, métrica cosine y umbral inicial provisional 0.5. La plantilla `.env.example` aún no refleja estas variables.
 - No se encontró endpoint, ID de modelo generativo ni credencial 4Geeks verificables; la integración de generación queda bloqueada hasta obtener endpoint/modelo oficiales. No se guardaron secretos.
 
+## Avance RAG Nexova — fase 1
+
+- Se añadió `data/process/knowledge_base.py`: chunking por secciones y unidades semánticas, embeddings FastEmbed de 384 dimensiones y colección Qdrant `nexova_knowledge` con distancia Cosine.
+- `setup()` indexa las cuatro fuentes con payloads completos e IDs deterministas; al reindexar elimina únicamente puntos obsoletos de cada fuente. Dos ejecuciones reales conservaron 17 puntos e IDs.
+- Conteos observados: `service-lines` 5, `pricing-model` 3, `hiring-process-sla` 5 y `objection-handling` 4.
+- `tests/process/test_knowledge_base.py` y `tests/pipelines/test_pipeline.py`: 7 pruebas aprobadas. Qdrant quedó detenido tras la validación; la colección reside en el volumen persistente de Compose.
+
