@@ -98,3 +98,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 
 - Informe reproducible en `audit/sales_forecast_report.md` y grafica en `audit/sales_forecast.png`: comparacion con naive estacional, sesgo mensual de +24.283 USD y dispersion entre arboles (23/24 meses dentro del rango, no calibrado). La mejora es limitada y no se recomienda presupuestar exclusivamente con esta prediccion.
 
+## Prediccion de ventas — Evaluacion temporal interna
+
+- Añadida validacion expanding-window con cinco bloques de 12 meses dentro del desarrollo 2016-2023, ajuste independiente por fold y pronostico recursivo sin consultar objetivos reales durante cada bloque; el holdout 2024-2025 permanece intacto.
+- Añadidas metricas MAE/RMSE de entrenamiento y validacion, curva temporal e informe en `data/eval/`. Validacion MAE media ± desviacion muestral: 44.187,96 ± 5.583,22 USD/mes; RMSE: 52.691,32 ± 6.716,45 USD/mes. El diagnostico observado es overfitting por brecha positiva persistente en los cinco folds.
+- Pruebas focalizadas: `5 passed`; `git diff --check` sin errores. La escritura de los artefactos y esta actualizacion del banco se realizaron con autorizacion explicita.
+- Limpieza solicitada: eliminados `inventory-backend-context` y `gestor-incidentes-centralizado.md` (versionados); `validacion-de-modelo.md` tambien fue eliminado, pero era un archivo local sin seguimiento y no forma parte del commit.
+
