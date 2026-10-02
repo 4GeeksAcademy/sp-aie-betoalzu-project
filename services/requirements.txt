@@ -15,3 +15,5 @@ psycopg2-binary>=2.9.12
 uvicorn
 pandas>=2.2.0
 prefect>=3
+qdrant-client>=1.16.2
+fastembed>=0.8.0

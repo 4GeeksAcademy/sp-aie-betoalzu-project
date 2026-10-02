@@ -72,3 +72,11 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadió el dashboard `/reporting` del backoffice, conectado a la API semanal y enlazado desde la navegación.
 - El CLI del pipeline se validó en SQLite local tras inicializar el esquema SQLModel; el build del backoffice reconoce la nueva ruta.
 
+## Avance RAG Nexova — fase 0
+
+- Se declararon `qdrant-client>=1.16.2` y `fastembed>=0.8.0` en `pyproject.toml` y `services/requirements.txt`, y se sincronizó `uv.lock`.
+- `uv sync`, `uv lock --check` y `uv pip check` pasaron. En host y en la imagen Docker se importaron ambos clientes; FastEmbed reporta el modelo `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` con dimensión 384.
+- Compose valida, construye el backend e incluye el montaje de solo lectura de los cuatro documentos. Qdrant respondió desde el host. El acceso entre contenedores tuvo timeout incluso desde un contenedor unido directamente a `nexova-network`; queda pendiente repetirlo en un entorno Docker con red entre contenedores habilitada.
+- `docs/rag/configuration.md` documenta URL de Qdrant host/Compose, métrica cosine y umbral inicial provisional 0.5. La plantilla `.env.example` aún no refleja estas variables.
+- No se encontró endpoint, ID de modelo generativo ni credencial 4Geeks verificables; la integración de generación queda bloqueada hasta obtener endpoint/modelo oficiales. No se guardaron secretos.
+
