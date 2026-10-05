@@ -15,7 +15,7 @@
 | `QDRANT_DISTANCE` | `Cosine` | Métrica de similitud compatible con el modelo elegido. |
 | `RAG_MIN_SCORE` | `0.5` | Umbral inicial provisional; debe calibrarse en evaluación. |
 | `LLM_BASE_URL` | (pendiente de confirmar) | Endpoint del proveedor de generación. |
-| `LLM_MODEL` | (pendiente de confirmar) | ID del modelo de generación, distinto de `EMBED_MODEL`. |
+| `LLM_MODEL` | `litellm/madrid-spain/openrouter/deepseek/deepseek-v4-flash` | ID de generación proporcionado para la integración; distinto de `EMBED_MODEL`. |
 | `LLM_API_KEY` | (secreto local, no guardar en Git) | Credencial del proveedor de generación. |
 
 Definir en el `.env` local las variables de esta tabla que necesite cada proceso. `.env.example` todavía no refleja la configuración RAG completa; usar los nombres de esta tabla y no guardar credenciales en la plantilla, logs, pruebas ni respuestas.
@@ -29,7 +29,7 @@ Definir en el `.env` local las variables de esta tabla que necesite cada proceso
 
 ## Estado de la integración generativa
 
-El repositorio y el entorno consultado no proporcionan un endpoint verificable, un ID de modelo generativo de 4Geeks ni una credencial. Por eso `LLM_BASE_URL`, `LLM_MODEL` y `LLM_API_KEY` quedan sin valor de ejemplo y no se afirma que la integración de generación esté confirmada. Antes de implementar la llamada en la fase 2, se deben obtener esos tres datos de la configuración oficial para estudiantes y comprobar el contrato HTTP/modelo. La credencial se configura localmente y nunca se incorpora al repositorio.
+El ID de generación proporcionado es `litellm/madrid-spain/openrouter/deepseek/deepseek-v4-flash`. Aún no se ha confirmado un `LLM_BASE_URL`, una credencial ni el contrato HTTP esperado por el proxy; por tanto, no se afirma que la integración de generación esté operativa. Antes de implementar y validar la llamada de la fase 2, hay que obtener esos datos y comprobar el contrato. La credencial se configura localmente y nunca se incorpora al repositorio.
 
 ## Validación de conectividad
 

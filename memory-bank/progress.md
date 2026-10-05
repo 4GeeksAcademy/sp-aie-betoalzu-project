@@ -87,3 +87,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Conteos observados: `service-lines` 5, `pricing-model` 3, `hiring-process-sla` 5 y `objection-handling` 4.
 - `tests/process/test_knowledge_base.py` y `tests/pipelines/test_pipeline.py`: 7 pruebas aprobadas. Qdrant quedó detenido tras la validación; la colección reside en el volumen persistente de Compose.
 
+## Avance RAG Nexova — configuración del modelo generativo
+
+- El usuario proporcionó el ID `litellm/madrid-spain/openrouter/deepseek/deepseek-v4-flash`; se registró en `docs/rag/configuration.md`.
+- `LLM_BASE_URL`, la credencial y el contrato HTTP del proxy siguen sin confirmar. La fase 0 no cumple aún su criterio de salida y no se inició la fase 2.
+- `.env.example` no pudo actualizarse porque el editor la marcó como archivo ignorado; conserva su typo `EBED_MODEL` y sus variables incompletas.
+
