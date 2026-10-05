@@ -8,14 +8,16 @@
 
 | Variable | Ejemplo no secreto | Uso |
 | --- | --- | --- |
-| `EMBED_MODEL` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Identificador FastEmbed usado para indexar y consultar. |
-| `EMBEDDING_DIMENSION` | `384` | Dimensión esperada del embedding de ese modelo. |
+| `EMBED_MODEL` | `litellm/madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` | ID del modelo remoto de embeddings elegido. La implementación actual todavía usa FastEmbed y debe migrarse antes de indexar con este ID. |
+| `EMBED_BASE_URL` | (pendiente de confirmar) | URL base del servicio LiteLLM que sirve el modelo de embeddings. |
+| `EMBED_MODEL_API_KEY` | (secreto local, no guardar en Git) | Credencial para el endpoint de embeddings. |
+| `EMBEDDING_DIMENSION` | (por verificar con el endpoint) | Dimensión que debe usarse al crear la colección Qdrant para este modelo. |
 | `QDRANT_URL` | `http://localhost:6333` | URL para procesos ejecutados desde el host. |
 | `QDRANT_COLLECTION` | `nexova_knowledge` | Colección fija definida por el contrato Nexova. |
 | `QDRANT_DISTANCE` | `Cosine` | Métrica de similitud compatible con el modelo elegido. |
 | `RAG_MIN_SCORE` | `0.5` | Umbral inicial provisional; debe calibrarse en evaluación. |
-| `LLM_BASE_URL` | (pendiente de confirmar) | Endpoint del proveedor de generación. |
-| `LLM_MODEL` | `litellm/madrid-spain/openrouter/deepseek/deepseek-v4-flash` | ID de generación proporcionado para la integración; distinto de `EMBED_MODEL`. |
+| `LLM_API_URL` | `https://api.openai.com/v1` | URL base de la API de generación indicada. |
+| `LLM_MODEL` | `gpt-4o-mini` | Modelo generativo elegido; distinto de `EMBED_MODEL`. |
 | `LLM_API_KEY` | (secreto local, no guardar en Git) | Credencial del proveedor de generación. |
 
 Definir en el `.env` local las variables de esta tabla que necesite cada proceso. `.env.example` todavía no refleja la configuración RAG completa; usar los nombres de esta tabla y no guardar credenciales en la plantilla, logs, pruebas ni respuestas.
@@ -29,8 +31,12 @@ Definir en el `.env` local las variables de esta tabla que necesite cada proceso
 
 ## Estado de la integración generativa
 
-El ID de generación proporcionado es `litellm/madrid-spain/openrouter/deepseek/deepseek-v4-flash`. Aún no se ha confirmado un `LLM_BASE_URL`, una credencial ni el contrato HTTP esperado por el proxy; por tanto, no se afirma que la integración de generación esté operativa. Antes de implementar y validar la llamada de la fase 2, hay que obtener esos datos y comprobar el contrato. La credencial se configura localmente y nunca se incorpora al repositorio.
+La configuración local indica `gpt-4o-mini` en `https://api.openai.com/v1`. La API compatible con OpenAI usa el contrato de chat completions; la integración del proyecto aún debe implementarse y probarse. La credencial se configura localmente y nunca se incorpora al repositorio ni a los logs.
+
+## Estado de embeddings remotos
+
+El ID configurado es `litellm/madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` y `EMBED_MODEL_API_KEY` está definida localmente. Falta `EMBED_BASE_URL`; no se debe asumir que `https://api.openai.com/v1` sirve el modelo LiteLLM de Perplexity. La dimensión se comprobará con una respuesta real del endpoint antes de migrar la colección. La implementación actual de `data/process/knowledge_base.py` carga todos los modelos con FastEmbed, por lo que todavía no puede usar el ID remoto.
 
 ## Validación de conectividad
 
-`docker compose up -d qdrant` publica Qdrant en el host y en la red de Compose; confirmar disponibilidad con `curl http://localhost:6333/`. Para detenerlo, usar `docker compose stop qdrant`. La conectividad real depende de que el servicio esté iniciado.
+`docker compose up -d qdrant` publica Qdrant en el host y en la red de Compose. En esta sesión, Qdrant respondió HTTP 200 en `http://localhost:6333/` después de iniciar el servicio. Para detenerlo, usar `docker compose stop qdrant`.

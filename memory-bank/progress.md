@@ -89,7 +89,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 
 ## Avance RAG Nexova — configuración del modelo generativo
 
-- El usuario proporcionó el ID `litellm/madrid-spain/openrouter/deepseek/deepseek-v4-flash`; se registró en `docs/rag/configuration.md`.
-- `LLM_BASE_URL`, la credencial y el contrato HTTP del proxy siguen sin confirmar. La fase 0 no cumple aún su criterio de salida y no se inició la fase 2.
-- `.env.example` no pudo actualizarse porque el editor la marcó como archivo ignorado; conserva su typo `EBED_MODEL` y sus variables incompletas.
+- El usuario cambió el modelo generativo a `gpt-4o-mini` con `LLM_API_URL=https://api.openai.com/v1`; ambos valores y el contrato OpenAI-compatible se documentaron. La clave está configurada localmente y no se leyó ni se registró.
+- El `.env` contiene `EMBED_MODEL=litellm/madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` y `EMBED_MODEL_API_KEY`; no se expusieron valores secretos.
+- Sigue ausente `EMBED_BASE_URL` y no se conoce la dimensión del modelo remoto. `data/process/knowledge_base.py` aún carga exclusivamente FastEmbed, por lo que falta implementar el adaptador remoto antes de usar este modelo.
+- Qdrant se inició con Compose y respondió HTTP 200 desde el host. No se reindexó ni modificó la colección existente; fase 0 sigue pendiente del contrato de embeddings y la dimensión.
+- `.env.example` conserva cambios locales del usuario y no se modificó; su plantilla sigue incompleta.
 
