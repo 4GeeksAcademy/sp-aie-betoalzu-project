@@ -1,293 +1,271 @@
-"""Index the Nexova commercial knowledge base in Qdrant."""
-
-from __future__ import annotations
 
 import hashlib
 import os
 import re
 import uuid
-from functools import lru_cache
 from pathlib import Path
-from typing import Any
 
+import requests
+from dotenv import load_dotenv
 from qdrant_client import QdrantClient, models
 
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
+CORPUS_DIR = ROOT_DIR / "docs" / "company-knowledge-base"
 COLLECTION_NAME = "nexova_knowledge"
-DEFAULT_EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MAX_CHUNK_CHARS = 1800
+REQUEST_TIMEOUT = (5, 60)
 SOURCE_DOCUMENTS = (
     ("service-lines", "nexova-service-lines.es.md"),
     ("pricing-model", "nexova-pricing-model.es.md"),
     ("hiring-process-sla", "nexova-hiring-process-sla.es.md"),
     ("objection-handling", "nexova-objection-handling.es.md"),
 )
-CORPUS_DIR = Path(__file__).resolve().parents[2] / "docs" / "company-knowledge-base"
-MAX_CHUNK_CHARS = 1200
-CHUNK_NAMESPACE = uuid.UUID("7a505623-326a-4e36-b7ea-4cb3b10d7536")
-HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
-NUMBERED_ITEM_PATTERN = re.compile(r"^\s{0,3}\d+[.)]\s+")
-QUOTED_ITEM_PATTERN = re.compile(r"^\s*[\"“]")
-SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
 
 
-def _embedding_dimension() -> int:
-    try:
-        dimension = int(os.getenv("EMBEDDING_DIMENSION", "384"))
-    except ValueError:
-        raise ValueError("EMBEDDING_DIMENSION debe ser un entero positivo.") from None
-    if dimension <= 0:
-        raise ValueError("EMBEDDING_DIMENSION debe ser un entero positivo.")
-    return dimension
+def _load_configuration() -> tuple[str, str, str | None]:
+    load_dotenv(ROOT_DIR / ".env", override=False)
+    model = os.getenv("EMBED_MODEL", "").strip()
+    base_url = os.getenv("EMBED_BASE_URL", "").strip().rstrip("/")
+    api_key = os.getenv("EMBED_MODEL_API_KEY", "").strip()
+    if not model:
+        raise RuntimeError("EMBED_MODEL is required to create Nexova embeddings.")
+    if not base_url:
+        raise RuntimeError("EMBED_BASE_URL is required to create Nexova embeddings.")
+    if not api_key:
+        raise RuntimeError("EMBED_MODEL_API_KEY is required to create Nexova embeddings.")
+    return model, base_url, os.getenv("EMBEDDING_DIMENSION")
 
 
-@lru_cache(maxsize=2)
-def _embedding_model(model_name: str) -> Any:
-    try:
-        from fastembed import TextEmbedding
-
-        return TextEmbedding(model_name=model_name)
-    except Exception:
-        raise RuntimeError(
-            f"No se pudo cargar el modelo de embeddings '{model_name}'. "
-            "Comprueba que EMBED_MODEL sea un modelo FastEmbed válido y que esté disponible."
-        ) from None
+def _embeddings_url(base_url: str) -> str:
+    if base_url.endswith("/v1"):
+        return f"{base_url}/embeddings"
+    return f"{base_url}/v1/embeddings"
 
 
 def embed(text: str) -> list[float]:
-    """Create the configured FastEmbed vector used for indexing and retrieval."""
     if not isinstance(text, str) or not text.strip():
-        raise ValueError("El texto para generar el embedding no puede estar vacío.")
+        raise ValueError("Embedding input must be a non-empty string.")
 
-    model_name = os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
+    model, base_url, configured_dimension = _load_configuration()
+    api_key = os.getenv("EMBED_MODEL_API_KEY", "").strip()
     try:
-        vector = next(_embedding_model(model_name).embed([text]))
-        values = vector.tolist() if hasattr(vector, "tolist") else list(vector)
-        values = [float(value) for value in values]
-    except Exception:
-        raise RuntimeError(
-            f"No se pudo generar el embedding con '{model_name}'. "
-            "Comprueba la disponibilidad local del modelo y vuelve a intentarlo."
-        ) from None
-
-    expected_dimension = _embedding_dimension()
-    if len(values) != expected_dimension:
-        raise ValueError(
-            f"El modelo '{model_name}' devolvió {len(values)} dimensiones; "
-            f"EMBEDDING_DIMENSION está configurado en {expected_dimension}."
+        response = requests.post(
+            _embeddings_url(base_url),
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"model": model, "input": text},
+            timeout=REQUEST_TIMEOUT,
         )
-    return values
+    except requests.RequestException as exc:
+        raise RuntimeError("Embedding provider request failed; check endpoint connectivity.") from exc
+
+    if response.status_code in (401, 403):
+        raise RuntimeError(
+            f"Embedding provider rejected authentication (HTTP {response.status_code}); "
+            "check EMBED_MODEL_API_KEY and provider access."
+        )
+    if not response.ok:
+        raise RuntimeError(
+            f"Embedding provider request failed (HTTP {response.status_code}); "
+            "check EMBED_BASE_URL and EMBED_MODEL."
+        )
+
+    try:
+        vector = response.json()["data"][0]["embedding"]
+        vector = [float(value) for value in vector]
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise RuntimeError("Embedding provider returned an invalid vector response.") from exc
+
+    if not vector or any(not (float("-inf") < value < float("inf")) for value in vector):
+        raise RuntimeError("Embedding provider returned an empty or non-finite vector.")
+    if configured_dimension:
+        try:
+            expected_dimension = int(configured_dimension)
+        except ValueError as exc:
+            raise RuntimeError("EMBEDDING_DIMENSION must be a positive integer.") from exc
+        if expected_dimension <= 0 or len(vector) != expected_dimension:
+            raise RuntimeError(
+                "Embedding vector dimension does not match EMBEDDING_DIMENSION; "
+                "verify the configured model and dimension."
+            )
+    return vector
 
 
-def _semantic_blocks(markdown: str) -> list[tuple[str, str]]:
-    section = "General"
-    block_lines: list[str] = []
-    blocks: list[tuple[str, str]] = []
-
-    def flush() -> None:
-        text = "\n".join(block_lines).strip()
-        if text:
-            blocks.append((section, text))
-        block_lines.clear()
-
-    for line in markdown.splitlines():
-        heading = HEADING_PATTERN.match(line)
-        if heading:
-            flush()
-            section = heading.group(1).strip()
-            continue
-        if not line.strip():
-            flush()
-            continue
-        if block_lines and (
-            NUMBERED_ITEM_PATTERN.match(line) or QUOTED_ITEM_PATTERN.match(line)
-        ):
-            flush()
-        block_lines.append(line.rstrip())
-
-    flush()
-    return blocks
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
 
 
-def _split_oversized_block(section: str, text: str, max_chars: int) -> list[tuple[str, str]]:
-    if len(text) <= max_chars:
-        return [(section, text)]
+def _split_oversized_block(text: str) -> list[str]:
+    if len(text) <= MAX_CHUNK_CHARS:
+        return [text]
 
-    sentences = SENTENCE_PATTERN.split(text)
+    sentences = re.split(r"(?<=[.!?])\s+", text)
     chunks: list[str] = []
     current = ""
     for sentence in sentences:
         candidate = f"{current} {sentence}".strip()
-        if current and len(candidate) > max_chars:
+        if current and len(candidate) > MAX_CHUNK_CHARS:
             chunks.append(current)
             current = sentence
         else:
             current = candidate
     if current:
         chunks.append(current)
-    return [(section, chunk) for chunk in chunks]
-
-
-def chunk_markdown(markdown: str, max_chars: int = MAX_CHUNK_CHARS) -> list[tuple[str, str]]:
-    """Split a Markdown document on headings and complete semantic blocks."""
-    if max_chars <= 0:
-        raise ValueError("max_chars debe ser mayor que cero.")
-    chunks = [
-        chunk
-        for section, text in _semantic_blocks(markdown)
-        for chunk in _split_oversized_block(section, text, max_chars)
-    ]
-    if len(chunks) < 3:
-        raise ValueError(
-            f"El documento produjo {len(chunks)} chunks; se requieren al menos 3. "
-            "Añade estructura semántica al documento o ajusta el chunking."
-        )
     return chunks
 
 
-def _point_id(source_document: str, section: str, chunk_index: int, text: str) -> str:
-    normalized_text = " ".join(text.split())
-    identity = f"{source_document}\0{section}\0{chunk_index}\0{normalized_text}"
-    return str(uuid.uuid5(CHUNK_NAMESPACE, identity))
+def chunk_markdown(markdown: str) -> list[tuple[str, str]]:
+    chunks: list[tuple[str, str]] = []
+    section_titles: list[str] = []
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        text = _normalize_text(" ".join(paragraph))
+        paragraph.clear()
+        if text:
+            section = " > ".join(section_titles) or "General"
+            chunks.extend((section, part) for part in _split_oversized_block(text))
+
+    for line in markdown.splitlines():
+        heading = re.match(r"^(#{1,6})\s+(.+?)\s*#*\s*$", line)
+        if heading:
+            flush_paragraph()
+            level = len(heading.group(1))
+            section_titles[:] = section_titles[: level - 1]
+            section_titles.append(heading.group(2).strip())
+        elif line.strip():
+            paragraph.append(line.strip())
+        else:
+            flush_paragraph()
+    flush_paragraph()
+    return chunks
 
 
-def _source_filter(source_document: str) -> models.Filter:
-    return models.Filter(
-        must=[
-            models.FieldCondition(
-                key="source_document",
-                match=models.MatchValue(value=source_document),
-            )
-        ]
-    )
-
-
-def _existing_source_ids(client: QdrantClient, source_document: str) -> set[str]:
-    point_ids: set[str] = set()
-    offset = None
-    while True:
-        records, offset = client.scroll(
-            collection_name=COLLECTION_NAME,
-            scroll_filter=_source_filter(source_document),
-            limit=256,
-            offset=offset,
-            with_payload=False,
-            with_vectors=False,
-        )
-        point_ids.update(str(record.id) for record in records)
-        if offset is None:
-            return point_ids
-
-
-def _ensure_collection(client: QdrantClient, dimension: int) -> None:
-    if not client.collection_exists(COLLECTION_NAME):
-        try:
-            client.create_collection(
-                collection_name=COLLECTION_NAME,
-                vectors_config=models.VectorParams(
-                    size=dimension,
-                    distance=models.Distance.COSINE,
-                ),
-            )
-        except Exception:
-            raise RuntimeError(
-                f"No se pudo crear la colección '{COLLECTION_NAME}'. "
-                "Comprueba QDRANT_URL y los permisos del servicio."
-            ) from None
-        return
-
-    try:
-        collection = client.get_collection(COLLECTION_NAME)
-        vector_config = collection.config.params.vectors
-    except Exception:
-        raise RuntimeError(
-            f"No se pudo inspeccionar la colección '{COLLECTION_NAME}'. "
-            "Comprueba que Qdrant esté disponible."
-        ) from None
-
-    if isinstance(vector_config, dict):
-        raise RuntimeError(
-            f"La colección '{COLLECTION_NAME}' usa vectores nombrados; "
-            "se requiere una colección con un vector sin nombre."
-        )
-    if vector_config.size != dimension or vector_config.distance != models.Distance.COSINE:
-        raise RuntimeError(
-            f"La colección '{COLLECTION_NAME}' es incompatible: requiere dimensión "
-            f"{dimension} y distancia Cosine, pero tiene dimensión {vector_config.size} "
-            f"y distancia {vector_config.distance}. No se modificó la colección."
-        )
-
-
-def _read_corpus() -> list[tuple[str, str]]:
-    documents = []
+def _read_source_chunks() -> dict[str, list[tuple[int, str, str]]]:
+    source_chunks: dict[str, list[tuple[int, str, str]]] = {}
     for source_document, filename in SOURCE_DOCUMENTS:
         path = CORPUS_DIR / filename
-        try:
-            markdown = path.read_text(encoding="utf-8")
-        except OSError:
-            raise FileNotFoundError(
-                f"No se puede leer '{path}'. Comprueba el montaje de "
-                "docs/company-knowledge-base en este entorno."
-            ) from None
-        documents.append((source_document, markdown))
-    return documents
+        if not path.is_file():
+            raise FileNotFoundError(f"Knowledge source is missing: {path}")
+        chunks = chunk_markdown(path.read_text(encoding="utf-8"))
+        if len(chunks) < 3:
+            raise RuntimeError(f"Knowledge source {filename} produced fewer than 3 chunks.")
+        source_chunks[source_document] = [
+            (index, section, text)
+            for index, (section, text) in enumerate(chunks)
+        ]
+    return source_chunks
 
 
-def _qdrant_client() -> QdrantClient:
-    try:
-        return QdrantClient(
-            url=os.getenv("QDRANT_URL", "http://localhost:6333"),
-            timeout=float(os.getenv("QDRANT_TIMEOUT_SECONDS", "10")),
+def _point_id(source_document: str, section: str, chunk_index: int, text: str) -> str:
+    content = "\0".join(
+        (source_document, _normalize_text(section), str(chunk_index), _normalize_text(text))
+    )
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, digest))
+
+
+def _scroll_source_points(client: QdrantClient, source_document: str):
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            collection_name=COLLECTION_NAME,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="source_document",
+                        match=models.MatchValue(value=source_document),
+                    )
+                ]
+            ),
+            limit=256,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
         )
-    except Exception:
-        raise RuntimeError(
-            "No se pudo inicializar el cliente Qdrant. Comprueba QDRANT_URL."
-        ) from None
+        yield from points
+        if offset is None:
+            break
+
+
+def _collection_vector_config(collection) -> tuple[int | None, models.Distance | None]:
+    vectors = collection.config.params.vectors
+    if isinstance(vectors, dict):
+        if len(vectors) != 1:
+            return None, None
+        vectors = next(iter(vectors.values()))
+    return vectors.size, vectors.distance
 
 
 def setup(client: QdrantClient | None = None) -> dict[str, int]:
-    """Index all four source documents and remove stale points per source."""
-    dimension = _embedding_dimension()
-    qdrant = client or _qdrant_client()
-    documents = _read_corpus()
-    _ensure_collection(qdrant, dimension)
+    if client is None:
+        load_dotenv(ROOT_DIR / ".env", override=False)
+        client = QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:6333"), timeout=10)
 
-    counts: dict[str, int] = {}
-    for source_document, markdown in documents:
-        chunks = chunk_markdown(markdown)
-        existing_ids = _existing_source_ids(qdrant, source_document)
+    source_chunks = _read_source_chunks()
+    pending_points: dict[str, list[models.PointStruct]] = {}
+    vector_dimension = None
+
+    for source_document, chunks in source_chunks.items():
         points = []
-        for chunk_index, (section, text) in enumerate(chunks):
-            point_id = _point_id(source_document, section, chunk_index, text)
-            payload = {
-                "company": "nexova",
-                "source_document": source_document,
-                "section": section,
-                "language": "es",
-                "chunk_index": chunk_index,
-                "text": text,
-            }
+        for chunk_index, section, text in chunks:
+            vector = embed(text)
+            if vector_dimension is None:
+                vector_dimension = len(vector)
+            elif len(vector) != vector_dimension:
+                raise RuntimeError("Embedding provider returned inconsistent vector dimensions.")
             points.append(
                 models.PointStruct(
-                    id=point_id,
-                    vector=embed(text),
-                    payload=payload,
+                    id=_point_id(source_document, section, chunk_index, text),
+                    vector=vector,
+                    payload={
+                        "company": "nexova",
+                        "source_document": source_document,
+                        "section": section,
+                        "language": "es",
+                        "chunk_index": chunk_index,
+                        "text": text,
+                    },
                 )
             )
+        pending_points[source_document] = points
 
-        try:
-            qdrant.upsert(collection_name=COLLECTION_NAME, points=points, wait=True)
-            stale_ids = existing_ids - {str(point.id) for point in points}
-            if stale_ids:
-                qdrant.delete(
-                    collection_name=COLLECTION_NAME,
-                    points_selector=models.PointIdsList(points=sorted(stale_ids)),
-                    wait=True,
-                )
-        except Exception:
+    if not vector_dimension:
+        raise RuntimeError("No valid embeddings were generated for the knowledge base.")
+
+    if client.collection_exists(COLLECTION_NAME):
+        existing_dimension, existing_distance = _collection_vector_config(
+            client.get_collection(COLLECTION_NAME)
+        )
+        if existing_dimension != vector_dimension or existing_distance != models.Distance.COSINE:
             raise RuntimeError(
-                f"No se pudo indexar '{source_document}' en Qdrant. "
-                "Comprueba la conectividad y vuelve a ejecutar setup()."
-            ) from None
-        counts[source_document] = len(points)
+                "Qdrant collection is incompatible with the configured embedding model "
+                f"(expected dimension {vector_dimension} and cosine distance). "
+                "Use a compatible collection or migrate it explicitly."
+            )
+    else:
+        client.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config=models.VectorParams(
+                size=vector_dimension,
+                distance=models.Distance.COSINE,
+            ),
+        )
 
+    counts = {}
+    for source_document, points in pending_points.items():
+        desired_ids = {str(point.id) for point in points}
+        client.upsert(collection_name=COLLECTION_NAME, points=points, wait=True)
+        stale_ids = [
+            point.id
+            for point in _scroll_source_points(client, source_document)
+            if str(point.id) not in desired_ids
+        ]
+        if stale_ids:
+            client.delete(
+                collection_name=COLLECTION_NAME,
+                points_selector=models.PointIdsList(points=stale_ids),
+                wait=True,
+            )
+        counts[source_document] = len(points)
     return counts
