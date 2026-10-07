@@ -26,6 +26,11 @@ const tools = [
     description: 'Consulta el reporte operativo del sistema: volumen, error rate y tasa de fallos de autenticación por día.',
     href: '/telemetry',
   },
+  {
+    name: 'Base de Conocimiento Comercial',
+    description: 'Asistente RAG para SDRs: consulta servicios, pricing, SLA y procesos comerciales de Nexova.',
+    href: '/knowledge',
+  },
 ];
 
 export default function BackofficeHomePage() {

@@ -1,4 +1,3 @@
-
 import hashlib
 import os
 import re
@@ -15,6 +14,7 @@ CORPUS_DIR = ROOT_DIR / "docs" / "company-knowledge-base"
 COLLECTION_NAME = "nexova_knowledge"
 MAX_CHUNK_CHARS = 1800
 REQUEST_TIMEOUT = (5, 60)
+LIST_ITEM_PATTERN = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)")
 SOURCE_DOCUMENTS = (
     ("service-lines", "nexova-service-lines.es.md"),
     ("pricing-model", "nexova-pricing-model.es.md"),
@@ -123,7 +123,7 @@ def chunk_markdown(markdown: str) -> list[tuple[str, str]]:
         text = _normalize_text(" ".join(paragraph))
         paragraph.clear()
         if text:
-            section = " > ".join(section_titles) or "General"
+            section = section_titles[-1] if section_titles else "General"
             chunks.extend((section, part) for part in _split_oversized_block(text))
 
     for line in markdown.splitlines():
@@ -134,6 +134,10 @@ def chunk_markdown(markdown: str) -> list[tuple[str, str]]:
             section_titles[:] = section_titles[: level - 1]
             section_titles.append(heading.group(2).strip())
         elif line.strip():
+            if LIST_ITEM_PATTERN.match(line) and any(
+                LIST_ITEM_PATTERN.match(item) for item in paragraph
+            ):
+                flush_paragraph()
             paragraph.append(line.strip())
         else:
             flush_paragraph()
