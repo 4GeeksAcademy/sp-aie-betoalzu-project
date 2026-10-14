@@ -1,6 +1,7 @@
 import hashlib
 import os
 import re
+import time
 import uuid
 from pathlib import Path
 
@@ -13,7 +14,10 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 CORPUS_DIR = ROOT_DIR / "docs" / "company-knowledge-base"
 COLLECTION_NAME = "nexova_knowledge"
 MAX_CHUNK_CHARS = 1800
-REQUEST_TIMEOUT = (5, 60)
+#REQUEST_TIMEOUT = (5, 60)
+REQUEST_TIMEOUT = (50, 200)
+MAX_RETRIES = 5
+BASE_RETRY_DELAY = 1.0  # seconds
 LIST_ITEM_PATTERN = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)")
 SOURCE_DOCUMENTS = (
     ("service-lines", "nexova-service-lines.es.md"),
@@ -49,15 +53,31 @@ def embed(text: str) -> list[float]:
 
     model, base_url, configured_dimension = _load_configuration()
     api_key = os.getenv("EMBED_MODEL_API_KEY", "").strip()
-    try:
-        response = requests.post(
-            _embeddings_url(base_url),
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"model": model, "input": text},
-            timeout=REQUEST_TIMEOUT,
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError("Embedding provider request failed; check endpoint connectivity.") from exc
+    print(api_key)
+    last_exc = None
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = requests.post(
+                _embeddings_url(base_url),
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"model": model, "input": text},
+                timeout=REQUEST_TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            last_exc = exc
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(BASE_RETRY_DELAY * (2 ** attempt))
+                continue
+            raise RuntimeError("Embedding provider request failed; check endpoint connectivity.") from exc
+
+        if response.status_code == 429 and attempt < MAX_RETRIES - 1:
+            delay = BASE_RETRY_DELAY * (2 ** attempt)
+            time.sleep(delay)
+            continue
+
+        break
+    else:
+        raise RuntimeError("Embedding provider request failed after max retries; check endpoint connectivity.") from last_exc
 
     if response.status_code in (401, 403):
         raise RuntimeError(

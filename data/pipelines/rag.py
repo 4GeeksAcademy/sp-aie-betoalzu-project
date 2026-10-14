@@ -110,14 +110,14 @@ def retrieve(
 
     query_vector = embed(query)
 
-    hits = client.search(
+    response = client.query_points(
         collection_name=COLLECTION_NAME,
-        query_vector=query_vector,
+        query=query_vector,
         limit=k,
-        score_threshold=threshold,
+        score_threshold=min_score,
         with_payload=True,
-        with_vectors=False,
     )
+    hits = response.points
 
     return [hit.payload for hit in hits]
 

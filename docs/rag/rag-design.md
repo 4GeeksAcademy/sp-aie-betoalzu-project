@@ -34,7 +34,7 @@
    - Cada sección `##` se convierte en un chunk independiente
    - Los ítems de listas consecutivas se separan en chunks individuales
    - Reglas y condiciones se preservan intactas
-3. Cada chunk se embedding mediante API HTTP (modelo `pplx-embed-v1-0.6b` vía LiteLLM)
+3. Cada chunk se embedding mediante API HTTP (modelo configurado en `EMBED_MODEL` vía `EMBED_BASE_URL/v1/embeddings`, contrato OpenAI)
 4. Los vectores se almacenan en Qdrant con metadatos: `company`, `source_document`, `section`, `language`, `chunk_index`, `text`
 5. IDs determinísticos (UUID5 basado en SHA-256 del contenido normalizado) para idempotencia
 6. Limpieza de puntos huérfanos (stale points) por `source_document`
@@ -63,7 +63,7 @@
 |-----------|-------|
 | Nombre | `nexova_knowledge` |
 | Distancia | `Cosine` |
-| Dimensión | Dinámica (determinada por la respuesta del embedding API) |
+| Dimensión | Determinada por el endpoint de embeddings (configurado en `EMBED_MODEL` y `EMBED_BASE_URL`). Se obtiene dinámicamente del primer embedding generado. |
 
 ### Payload por punto
 
@@ -106,7 +106,10 @@
 | `EMBED_MODEL` | Modelo de embeddings | Sí |
 | `EMBED_BASE_URL` | URL del endpoint de embeddings | Sí |
 | `EMBED_MODEL_API_KEY` | API key de embeddings | Sí |
+| `EMBEDDING_DIMENSION` | Dimensión del vector (opcional, se determina dinámicamente) | No |
 | `QDRANT_URL` | URL del servidor Qdrant | No (default `http://localhost:6333`) |
+| `QDRANT_DISTANCE` | Métrica de similitud | No (default `Cosine`) |
+| `RAG_MIN_SCORE` | Umbral mínimo de similitud para retrieval | No (default `0.5`) |
 | `LLM_API_URL` | URL base del LLM (OpenAI-compatible) | Sí |
 | `LLM_MODEL` | Modelo de generación | Sí (default `gpt-4o-mini`) |
 | `LLM_API_KEY` | API key del LLM | Sí |

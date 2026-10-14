@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { getAuthHeaders } from '../../lib/auth-token';
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 type QueryResponse = { answer: string };
 
 export default function KnowledgePage() {
@@ -24,7 +22,7 @@ export default function KnowledgePage() {
     setSource('');
 
     try {
-      const response = await fetch(`${apiUrl}/knowledge/query`, {
+      const response = await fetch('/api/knowledge/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,8 +42,8 @@ export default function KnowledgePage() {
       }
 
       if (!response.ok) {
-        const detail = await response.json().then((b) => b.detail).catch(() => 'Error al consultar la base de conocimiento.');
-        setError(detail);
+        const body = await response.json().catch(() => ({}));
+        setError(body.detail || body.error || 'Error al consultar la base de conocimiento.');
         return;
       }
 

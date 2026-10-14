@@ -1,17 +1,19 @@
-# Configuración inicial del RAG Nexova
+# Configuración del RAG Nexova
 
 ## Dependencias y ejecución
 
-`qdrant-client` y `fastembed` están declarados en `pyproject.toml` y en `services/requirements.txt`. El backend Docker los instala desde este último manifiesto. FastEmbed ejecuta los embeddings localmente mediante ONNX Runtime; no requiere una credencial de proveedor.
+`qdrant-client` y `requests` gestionan la conexión a Qdrant y al proveedor de embeddings vía HTTP. Ambos están declarados en `pyproject.toml` y en `services/requirements.txt`. No se requiere FastEmbed ni ONNX Runtime.
+
+El embedding se realiza mediante llamada HTTP a un endpoint compatible con la API de OpenAI (`/v1/embeddings`), configurado vía `EMBED_BASE_URL` y `EMBED_MODEL`.
 
 ## Variables
 
 | Variable | Ejemplo no secreto | Uso |
 | --- | --- | --- |
-| `EMBED_MODEL` | `litellm/madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` | ID del modelo remoto de embeddings elegido. La implementación actual todavía usa FastEmbed y debe migrarse antes de indexar con este ID. |
-| `EMBED_BASE_URL` | (pendiente de confirmar) | URL base del servicio LiteLLM que sirve el modelo de embeddings. |
-| `EMBED_MODEL_API_KEY` | (secreto local, no guardar en Git) | Credencial para el endpoint de embeddings. |
-| `EMBEDDING_DIMENSION` | (por verificar con el endpoint) | Dimensión que debe usarse al crear la colección Qdrant para este modelo. |
+| `EMBED_MODEL` | `madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` | ID del modelo remoto de embeddings, enviado en el campo `model` de la request HTTP al endpoint de embeddings. |
+| `EMBED_BASE_URL` | `https://litellm.4geeks.ai` | URL base del servicio LiteLLM que sirve el modelo de embeddings (debe terminar en `/v1` o se completa automáticamente). |
+| `EMBED_MODEL_API_KEY` | (secreto local, no guardar en Git) | Credencial para el endpoint de embeddings (`Authorization: Bearer <key>`). |
+| `EMBEDDING_DIMENSION` | `1024` | Dimensión del vector que devuelve el modelo. Se determina experimentalmente con una llamada real y se usa al crear la colección Qdrant. Si no se define, la colección se crea con la dimensión dinámica del primer embedding. |
 | `QDRANT_URL` | `http://localhost:6333` | URL para procesos ejecutados desde el host. |
 | `QDRANT_COLLECTION` | `nexova_knowledge` | Colección fija definida por el contrato Nexova. |
 | `QDRANT_DISTANCE` | `Cosine` | Métrica de similitud compatible con el modelo elegido. |
@@ -31,11 +33,11 @@ Definir en el `.env` local las variables de esta tabla que necesite cada proceso
 
 ## Estado de la integración generativa
 
-La configuración local indica `gpt-4o-mini` en `https://api.openai.com/v1`. La API compatible con OpenAI usa el contrato de chat completions; la integración del proyecto aún debe implementarse y probarse. La credencial se configura localmente y nunca se incorpora al repositorio ni a los logs.
+`gpt-4o-mini` configurado en `LLM_API_URL=https://api.openai.com/v1`. La API compatible con OpenAI usa el contrato de chat completions. La integración está implementada en `data/pipelines/rag.py` usando `requests.post` contra `/v1/chat/completions`. La credencial se configura localmente y nunca se incorpora al repositorio ni a los logs.
 
 ## Estado de embeddings remotos
 
-El ID configurado es `litellm/madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` y `EMBED_MODEL_API_KEY` está definida localmente. Falta `EMBED_BASE_URL`; no se debe asumir que `https://api.openai.com/v1` sirve el modelo LiteLLM de Perplexity. La dimensión se comprobará con una respuesta real del endpoint antes de migrar la colección. La implementación actual de `data/process/knowledge_base.py` carga todos los modelos con FastEmbed, por lo que todavía no puede usar el ID remoto.
+El ID configurado es `madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` con `EMBED_MODEL_API_KEY` definida localmente. La implementación en `data/process/knowledge_base.py` usa `requests.post` contra `EMBED_BASE_URL/v1/embeddings` siguiendo el contrato OpenAI. La dimensión se determina dinámicamente desde la primera respuesta del endpoint. FastEmbed ha sido eliminado tanto de dependencias como de la implementación.
 
 ## Validación de conectividad
 

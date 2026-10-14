@@ -22,7 +22,7 @@ class FakeQdrantClient:
     def __init__(self, points: list[dict[str, Any]] | None = None) -> None:
         self._points = points or []
 
-    def search(self, **kwargs) -> list[Any]:
+    def query_points(self, **kwargs) -> list[Any]:
         # Return simple namespace objects mimicking Qdrant hit
         hits: list[Any] = []
         for p in self._points:
@@ -34,7 +34,7 @@ class FakeQdrantClient:
             hits.append(hit)
         if kwargs.get("limit"):
             return hits[: kwargs["limit"]]
-        return hits
+        return MagicMock(points=hits)
 
 
 class FakeResponse:
