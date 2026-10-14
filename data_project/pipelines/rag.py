@@ -18,6 +18,7 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from data_project.process.knowledge_base import COLLECTION_NAME, embed
 
@@ -110,13 +111,21 @@ def retrieve(
 
     query_vector = embed(query)
 
-    response = client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=query_vector,
-        limit=k,
-        score_threshold=min_score,
-        with_payload=True,
-    )
+    try:
+        response = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_vector,
+            limit=k,
+            score_threshold=min_score,
+            with_payload=True,
+        )
+    except UnexpectedResponse as exc:
+        if exc.status_code == 404:
+            raise RuntimeError(
+                "Knowledge collection is missing in Qdrant; "
+                "index the knowledge base before querying (POST /knowledge/index)."
+            ) from exc
+        raise
     hits = response.points
 
     return [hit.payload for hit in hits]

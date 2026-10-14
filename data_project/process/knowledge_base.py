@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 from dotenv import load_dotenv
@@ -37,6 +38,9 @@ def _load_configuration() -> tuple[str, str, str | None]:
         raise RuntimeError("EMBED_MODEL is required to create Nexova embeddings.")
     if not base_url:
         raise RuntimeError("EMBED_BASE_URL is required to create Nexova embeddings.")
+    parsed_url = urlsplit(base_url)
+    if parsed_url.scheme not in ("http", "https") or not parsed_url.hostname:
+        raise RuntimeError("EMBED_BASE_URL must be an absolute HTTP URL, including https://.")
     if not api_key:
         raise RuntimeError("EMBED_MODEL_API_KEY is required to create Nexova embeddings.")
     return model, base_url, os.getenv("EMBEDDING_DIMENSION")
@@ -54,7 +58,6 @@ def embed(text: str) -> list[float]:
 
     model, base_url, configured_dimension = _load_configuration()
     api_key = os.getenv("EMBED_MODEL_API_KEY", "").strip()
-    print(api_key)
     last_exc = None
     for attempt in range(MAX_RETRIES):
         try:

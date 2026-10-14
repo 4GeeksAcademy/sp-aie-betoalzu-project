@@ -12,6 +12,7 @@ Requires-Dist: bcrypt>=4.0.0
 Requires-Dist: fastapi
 Requires-Dist: pydantic[email]
 Requires-Dist: sqlmodel>=0.0.39
+Requires-Dist: psycopg[binary]>=3.2.0
 Requires-Dist: psycopg2-binary>=2.9.12
 Requires-Dist: pandas>=2.2.0
 Requires-Dist: prefect>=3
