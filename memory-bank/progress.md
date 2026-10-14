@@ -101,3 +101,8 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se incluyó `data_project*` en el descubrimiento setuptools. `docker compose config --quiet` pasó y las pruebas de pipeline, indexación e inventario terminaron con `8 passed`.
 - Una ejecución más amplia conserva fallos no relacionados: tres tests RAG usan un mock Qdrant con forma distinta a la respuesta esperada (`.points`) y dos tests de usuarios esperan diccionarios en lugar de `UserOut`.
 
+## Fuentes locales del backoffice
+
+- Se reemplazó `next/font/google` por paquetes Fontsource locales para Geist, Geist Mono y Outfit; el build de Next y TypeScript pasan sin descargar fuentes durante el build.
+- El backoffice responde en `3001`; el backend y el website mantienen bloqueos independientes de DNS externo y Tailwind, respectivamente.
+
