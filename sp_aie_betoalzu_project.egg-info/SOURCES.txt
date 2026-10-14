@@ -1,5 +1,10 @@
 README.md
 pyproject.toml
+data_project/eval/evaluate_recall.py
+data_project/pipelines/__init__.py
+data_project/pipelines/pipeline.py
+data_project/pipelines/rag.py
+data_project/process/knowledge_base.py
 scripts/__init__.py
 scripts/analyze.py
 scripts/seed.py

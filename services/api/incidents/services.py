@@ -25,7 +25,7 @@ from services.api.incidents.models import (
 )
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
-_INCIDENTS_DB_PATH = _ROOT_DIR / "data" / "incidents_db.json"
+_INCIDENTS_DB_PATH = _ROOT_DIR / "data_project" / "incidents_db.json"
 
 
 def _get_db_path() -> Path:

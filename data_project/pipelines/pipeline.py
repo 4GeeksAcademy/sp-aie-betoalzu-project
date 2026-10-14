@@ -244,7 +244,7 @@ def load_weekly_reporting_flow(staging_rows: list[dict[str, Any]], week_start: d
 @task
 def export_eval_snapshot(staging_rows: list[dict[str, Any]], week_start: date) -> None:
     """Optional secondary output; its failure must not block the reporting table."""
-    output_dir = ROOT / "data" / "eval"
+    output_dir = ROOT / "data_project" / "eval"
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / f"weekly_{week_start.isoformat()}.json").write_text(
         json.dumps(staging_rows, default=str, indent=2), encoding="utf-8"

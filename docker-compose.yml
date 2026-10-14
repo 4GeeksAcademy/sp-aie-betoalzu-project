@@ -19,7 +19,7 @@ services:
       # Bind mount del código fuente para hot-reload
       - ./server.py:/app/server.py
       - ./services/:/app/services/
-      - ./data/:/app/data/
+      - ./data_project/:/app/data_project/
       - ./scripts/:/app/scripts/
       - ./docs/company-knowledge-base/:/app/docs/company-knowledge-base/:ro
     env_file:

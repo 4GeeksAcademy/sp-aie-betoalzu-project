@@ -1,6 +1,6 @@
 from datetime import date
 
-from data.pipelines.pipeline import (
+from data_project.pipelines.pipeline import (
     aggregate_weekly_performance,
     calculate_total_material_cost,
     count_cost_variance_events,

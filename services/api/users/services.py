@@ -10,7 +10,7 @@ from tinydb import TinyDB, Query
 from services.api.users.models import UserCreate, UserUpdate, UserInDB, UserOut, Role
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
-_USERS_DB_PATH = _ROOT_DIR / "data" / "users_db.json"
+_USERS_DB_PATH = _ROOT_DIR / "data_project" / "users_db.json"
 
 
 def _utc_now_str() -> str:

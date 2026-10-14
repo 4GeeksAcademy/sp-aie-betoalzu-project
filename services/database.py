@@ -22,7 +22,7 @@ load_dotenv()  # Load variables from .env file
 # ---------------------------------------------------------------------------
 
 _ROOT_DIR = Path(__file__).resolve().parent.parent  # services/
-_DATA_DIR = _ROOT_DIR / "data"
+_DATA_DIR = _ROOT_DIR / "data_project"
 
 
 def _ensure_data_dir() -> Path:
@@ -31,7 +31,7 @@ def _ensure_data_dir() -> Path:
 
 
 def get_tinydb(db_name: str = "users_db.json") -> TinyDB:
-    """Open a TinyDB database file from the data/ directory.
+    """Open a TinyDB database file from the data_project/ directory.
 
     The caller is responsible for closing the database.
     """
@@ -56,7 +56,8 @@ if DATABASE_URL:
     )
 else:
     # Fallback: SQLite in-memory for local development without Supabase
-    engine = create_engine("sqlite:///./data/nexova_dev.db", echo=False)
+    _ensure_data_dir()
+    engine = create_engine(f"sqlite:///{_DATA_DIR / 'nexova_dev.db'}", echo=False)
 
 
 def init_db() -> None:

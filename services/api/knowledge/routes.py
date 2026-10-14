@@ -10,8 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from data.pipelines.rag import query as rag_query
-from data.process.knowledge_base import setup as index_setup
+from data_project.pipelines.rag import query as rag_query
+from data_project.process.knowledge_base import setup as index_setup
 from services.api.users.auth import get_admin_user, get_current_user
 from services.api.users.models import UserInDB
 

@@ -5,7 +5,7 @@ Exports:
 - generate_answer(question, context)      → str
 - query(question)                         → str
 
-Uses embed() from data.process.knowledge_base and the OpenAI-compatible
+Uses embed() from data_project.process.knowledge_base and the OpenAI-compatible
 LLM configured in the environment (LLM_API_URL, LLM_MODEL, LLM_API_KEY).
 """
 
@@ -19,7 +19,7 @@ import requests
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 
-from data.process.knowledge_base import COLLECTION_NAME, embed
+from data_project.process.knowledge_base import COLLECTION_NAME, embed
 
 ROOT_DIR = __import__("pathlib").Path(__file__).resolve().parents[2]
 REQUEST_TIMEOUT = (5, 60)

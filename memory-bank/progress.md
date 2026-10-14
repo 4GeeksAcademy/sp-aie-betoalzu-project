@@ -95,3 +95,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Qdrant se inició con Compose y respondió HTTP 200 desde el host. No se reindexó ni modificó la colección existente; fase 0 sigue pendiente del contrato de embeddings y la dimensión.
 - `.env.example` conserva cambios locales del usuario y no se modificó; su plantilla sigue incompleta.
 
+## Avance renombrado `data_project/`
+
+- Se actualizaron los imports Python, las rutas TinyDB/SQLite, los seeders y la salida de evaluación para usar `data_project/`; Compose y Dockerfile montan/copían el paquete bajo `/app/data_project/`.
+- Se incluyó `data_project*` en el descubrimiento setuptools. `docker compose config --quiet` pasó y las pruebas de pipeline, indexación e inventario terminaron con `8 passed`.
+- Una ejecución más amplia conserva fallos no relacionados: tres tests RAG usan un mock Qdrant con forma distinta a la respuesta esperada (`.points`) y dos tests de usuarios esperan diccionarios en lugar de `UserOut`.
+

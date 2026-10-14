@@ -1,4 +1,4 @@
-"""Contract tests for the RAG pipeline (data/pipelines/rag.py).
+"""Contract tests for the RAG pipeline (data_project/pipelines/rag.py).
 
 All external dependencies (Qdrant, LLM HTTP) are replaced with test doubles
 so these tests are fast, deterministic and safe to run without credentials.
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from data.pipelines import rag
+from data_project.pipelines import rag
 
 
 # ── Fakes ────────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ class TestGenerateAnswer:
         self, sample_chunks: list[dict[str, Any]]
     ) -> None:
         with patch.object(rag, "_load_llm_config", return_value=("http://fake", "gpt-4o-mini", "sk-fake")):
-            with patch("data.pipelines.rag.requests.post", return_value=FakeResponse()) as mock_post:
+            with patch("data_project.pipelines.rag.requests.post", return_value=FakeResponse()) as mock_post:
                 answer = rag.generate_answer("¿Cuál es la tarifa?", sample_chunks)
 
         assert answer == "Respuesta simulada del asistente."
@@ -146,13 +146,13 @@ class TestGenerateAnswer:
 
     def test_raises_on_llm_auth_error(self, sample_chunks: list[dict[str, Any]]) -> None:
         with patch.object(rag, "_load_llm_config", return_value=("http://fake", "gpt-4o-mini", "bad-key")):
-            with patch("data.pipelines.rag.requests.post", return_value=FakeResponse(status_code=401)):
+            with patch("data_project.pipelines.rag.requests.post", return_value=FakeResponse(status_code=401)):
                 with pytest.raises(RuntimeError, match="authentication"):
                     rag.generate_answer("test", sample_chunks)
 
     def test_raises_on_non_ok_llm_response(self, sample_chunks: list[dict[str, Any]]) -> None:
         with patch.object(rag, "_load_llm_config", return_value=("http://fake", "gpt-4o-mini", "sk-fake")):
-            with patch("data.pipelines.rag.requests.post", return_value=FakeResponse(status_code=500)):
+            with patch("data_project.pipelines.rag.requests.post", return_value=FakeResponse(status_code=500)):
                 with pytest.raises(RuntimeError, match="HTTP 500"):
                     rag.generate_answer("test", sample_chunks)
 
@@ -160,7 +160,7 @@ class TestGenerateAnswer:
         bad_json = {"unexpected": "structure"}
         with patch.object(rag, "_load_llm_config", return_value=("http://fake", "gpt-4o-mini", "sk-fake")):
             with patch(
-                "data.pipelines.rag.requests.post",
+                "data_project.pipelines.rag.requests.post",
                 return_value=FakeResponse(status_code=200, json_data=bad_json),
             ):
                 with pytest.raises(RuntimeError, match="invalid response"):

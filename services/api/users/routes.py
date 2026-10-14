@@ -193,7 +193,7 @@ def reset_password(payload: ResetPasswordRequest):
     from tinydb import TinyDB, Query
     from pathlib import Path
 
-    db_path = Path(__file__).resolve().parents[3] / "data" / "users_db.json"
+    db_path = Path(__file__).resolve().parents[3] / "data_project" / "users_db.json"
     db = TinyDB(str(db_path))
     try:
         table = db.table("reset_tokens")

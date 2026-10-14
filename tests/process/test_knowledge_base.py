@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from qdrant_client import models
 
-from data.process import knowledge_base
+from data_project.process import knowledge_base
 
 
 class FakeQdrant:

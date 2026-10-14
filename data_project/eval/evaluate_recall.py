@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Evaluate Recall@3 for the RAG retrieval pipeline.
 
-Reads ``data/eval/test-queries.json`` and for each question runs
+Reads ``data_project/eval/test-queries.json`` and for each question runs
 ``retrieve(k=3)``, then checks whether the expected source documents
 appear in the returned payloads.
 
 Usage:
-    uv run python data/eval/evaluate_recall.py
+    uv run python data_project/eval/evaluate_recall.py
 
 Exit code:
     0  — Recall@3 ≥ 80 %
@@ -19,8 +19,8 @@ import json
 import sys
 from pathlib import Path
 
-from data.pipelines.rag import retrieve
-from data.process.knowledge_base import setup
+from data_project.pipelines.rag import retrieve
+from data_project.process.knowledge_base import setup
 
 HERE = Path(__file__).resolve().parent
 QUERIES_PATH = HERE / "test-queries.json"

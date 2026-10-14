@@ -24,6 +24,7 @@ RUN uv pip install --system -r requirements.txt
 # ------------------------------------------------------------------
 COPY server.py .
 COPY services/ ./services/
+COPY data_project/ ./data_project/
 
 # ------------------------------------------------------------------
 # Puerto y comando de arranque con --reload habilitado

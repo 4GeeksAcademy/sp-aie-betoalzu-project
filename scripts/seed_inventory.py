@@ -36,7 +36,7 @@ if str(ROOT_DIR) not in sys.path:
 from tinydb import TinyDB, Query
 
 
-INVENTORY_DB_PATH = ROOT_DIR / "data" / "inventory_db.json"
+INVENTORY_DB_PATH = ROOT_DIR / "data_project" / "inventory_db.json"
 
 # Sample user UUID from TinyDB users (1st user doc_id)
 DEFAULT_USER_UUID = "1"
