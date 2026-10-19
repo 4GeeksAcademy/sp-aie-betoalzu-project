@@ -26,9 +26,6 @@ services:
       - .env
     environment:
       QDRANT_URL: http://qdrant:6333
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
     depends_on:
       - qdrant
     networks:

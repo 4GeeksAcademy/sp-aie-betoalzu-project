@@ -1,3 +1,25 @@
+# Docker en Codespaces
+
+Si el backend no puede resolver el dominio del proveedor de embeddings desde
+la red bridge de Docker, pero el workspace si tiene conectividad, utilizar
+la configuracion opcional de red de host:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.codespaces.yml up -d backend qdrant
+```
+
+Esta variante esta destinada a Codespaces/Linux: el backend usa la red del
+host y accede a Qdrant mediante su puerto publicado en `127.0.0.1:6333`.
+El puerto 8000 debe estar libre; detener antes cualquier backend iniciado
+por separado con `docker compose run --service-ports`.
+No requiere cambiar claves, modelos ni reindexar la coleccion.
+
+La variante usa el identificador autorizado del modelo generativo actual,
+`madrid-spain/openrouter/deepseek/deepseek-v4-flash`, sin el prefijo de cliente
+`litellm/`. En llamadas HTTP directas ese prefijo provoca un rechazo 403
+`team_model_access_denied`. Si se elige otro modelo, actualizar este valor
+con el identificador exacto autorizado por el proveedor.
+
 # Configuración del RAG Nexova
 
 ## Dependencias y ejecución

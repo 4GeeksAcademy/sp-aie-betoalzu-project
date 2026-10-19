@@ -1,0 +1,8 @@
+services:
+  backend:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment:
+      QDRANT_URL: http://127.0.0.1:6333
+      LLM_MODEL: madrid-spain/openrouter/deepseek/deepseek-v4-flash

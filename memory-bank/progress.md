@@ -106,3 +106,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se reemplazó `next/font/google` por paquetes Fontsource locales para Geist, Geist Mono y Outfit; el build de Next y TypeScript pasan sin descargar fuentes durante el build.
 - El backoffice responde en `3001`; el backend y el website mantienen bloqueos independientes de DNS externo y Tailwind, respectivamente.
 
+## Correccion de conectividad RAG en Codespaces
+
+- Se confirmo que la red bridge de Docker no resolvia el proveedor de embeddings, causando reintentos y respuestas 502. Se retiraron los DNS publicos forzados de Compose y se agrego `docker-compose.codespaces.yml` con red de host para el backend y Qdrant en `http://127.0.0.1:6333`.
+- El proveedor generativo devolvia 403 `team_model_access_denied` por el prefijo `litellm/`. La variante usa el identificador autorizado del mismo modelo: `madrid-spain/openrouter/deepseek/deepseek-v4-flash`. No se modificaron credenciales ni se reindexo la coleccion.
+- Se documento el arranque con ambos archivos Compose. El backend activo usa esta variante y responde HTTP 200 en `/docs`.
+- Validacion previa al commit: Compose y `git diff --check` pasan; el endpoint `/knowledge/query`, con autenticacion simulada y proveedores reales, responde HTTP 200 en 5,8 segundos. La prueba completa previa recupero cinco fragmentos de Qdrant.
+
