@@ -167,7 +167,7 @@ def seed_from_csv(file_path: Path) -> dict:
 
     # Clear existing incidents for a clean seed
     from tinydb import TinyDB
-    db_path = ROOT_DIR / "data" / "incidents_db.json"
+    db_path = ROOT_DIR / "data_project" / "incidents_db.json"
     if db_path.exists():
         db_path.unlink()
         print("  Cleared existing incidents database.")

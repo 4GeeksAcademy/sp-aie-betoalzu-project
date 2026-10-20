@@ -72,3 +72,44 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadió el dashboard `/reporting` del backoffice, conectado a la API semanal y enlazado desde la navegación.
 - El CLI del pipeline se validó en SQLite local tras inicializar el esquema SQLModel; el build del backoffice reconoce la nueva ruta.
 
+## Avance RAG Nexova — fase 0
+
+- Se declararon `qdrant-client>=1.16.2` y `fastembed>=0.8.0` en `pyproject.toml` y `services/requirements.txt`, y se sincronizó `uv.lock`.
+- `uv sync`, `uv lock --check` y `uv pip check` pasaron. En host y en la imagen Docker se importaron ambos clientes; FastEmbed reporta el modelo `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` con dimensión 384.
+- Compose valida, construye el backend e incluye el montaje de solo lectura de los cuatro documentos. Qdrant respondió desde el host. El acceso entre contenedores tuvo timeout incluso desde un contenedor unido directamente a `nexova-network`; queda pendiente repetirlo en un entorno Docker con red entre contenedores habilitada.
+- `docs/rag/configuration.md` documenta URL de Qdrant host/Compose, métrica cosine y umbral inicial provisional 0.5. La plantilla `.env.example` aún no refleja estas variables.
+- No se encontró endpoint, ID de modelo generativo ni credencial 4Geeks verificables; la integración de generación queda bloqueada hasta obtener endpoint/modelo oficiales. No se guardaron secretos.
+
+## Avance RAG Nexova — fase 1
+
+- Se añadió `data/process/knowledge_base.py`: chunking por secciones y unidades semánticas, embeddings FastEmbed de 384 dimensiones y colección Qdrant `nexova_knowledge` con distancia Cosine.
+- `setup()` indexa las cuatro fuentes con payloads completos e IDs deterministas; al reindexar elimina únicamente puntos obsoletos de cada fuente. Dos ejecuciones reales conservaron 17 puntos e IDs.
+- Conteos observados: `service-lines` 5, `pricing-model` 3, `hiring-process-sla` 5 y `objection-handling` 4.
+- `tests/process/test_knowledge_base.py` y `tests/pipelines/test_pipeline.py`: 7 pruebas aprobadas. Qdrant quedó detenido tras la validación; la colección reside en el volumen persistente de Compose.
+
+## Avance RAG Nexova — configuración del modelo generativo
+
+- El usuario cambió el modelo generativo a `gpt-4o-mini` con `LLM_API_URL=https://api.openai.com/v1`; ambos valores y el contrato OpenAI-compatible se documentaron. La clave está configurada localmente y no se leyó ni se registró.
+- El `.env` contiene `EMBED_MODEL=litellm/madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` y `EMBED_MODEL_API_KEY`; no se expusieron valores secretos.
+- Sigue ausente `EMBED_BASE_URL` y no se conoce la dimensión del modelo remoto. `data/process/knowledge_base.py` aún carga exclusivamente FastEmbed, por lo que falta implementar el adaptador remoto antes de usar este modelo.
+- Qdrant se inició con Compose y respondió HTTP 200 desde el host. No se reindexó ni modificó la colección existente; fase 0 sigue pendiente del contrato de embeddings y la dimensión.
+- `.env.example` conserva cambios locales del usuario y no se modificó; su plantilla sigue incompleta.
+
+## Avance renombrado `data_project/`
+
+- Se actualizaron los imports Python, las rutas TinyDB/SQLite, los seeders y la salida de evaluación para usar `data_project/`; Compose y Dockerfile montan/copían el paquete bajo `/app/data_project/`.
+- Se incluyó `data_project*` en el descubrimiento setuptools. `docker compose config --quiet` pasó y las pruebas de pipeline, indexación e inventario terminaron con `8 passed`.
+- Una ejecución más amplia conserva fallos no relacionados: tres tests RAG usan un mock Qdrant con forma distinta a la respuesta esperada (`.points`) y dos tests de usuarios esperan diccionarios en lugar de `UserOut`.
+
+## Fuentes locales del backoffice
+
+- Se reemplazó `next/font/google` por paquetes Fontsource locales para Geist, Geist Mono y Outfit; el build de Next y TypeScript pasan sin descargar fuentes durante el build.
+- El backoffice responde en `3001`; el backend y el website mantienen bloqueos independientes de DNS externo y Tailwind, respectivamente.
+
+## Correccion de conectividad RAG en Codespaces
+
+- Se confirmo que la red bridge de Docker no resolvia el proveedor de embeddings, causando reintentos y respuestas 502. Se retiraron los DNS publicos forzados de Compose y se agrego `docker-compose.codespaces.yml` con red de host para el backend y Qdrant en `http://127.0.0.1:6333`.
+- El proveedor generativo devolvia 403 `team_model_access_denied` por el prefijo `litellm/`. La variante usa el identificador autorizado del mismo modelo: `madrid-spain/openrouter/deepseek/deepseek-v4-flash`. No se modificaron credenciales ni se reindexo la coleccion.
+- Se documento el arranque con ambos archivos Compose. El backend activo usa esta variante y responde HTTP 200 en `/docs`.
+- Validacion previa al commit: Compose y `git diff --check` pasan; el endpoint `/knowledge/query`, con autenticacion simulada y proveedores reales, responde HTTP 200 en 5,8 segundos. La prueba completa previa recupero cinco fragmentos de Qdrant.
+

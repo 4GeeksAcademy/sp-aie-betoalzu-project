@@ -1,0 +1,52 @@
+[
+  {
+    "question": "¿Cuál es la tarifa de Nexova para headhunting ejecutivo?",
+    "relevant_sources": ["pricing-model"],
+    "relevant_sections": ["Headhunting ejecutivo"]
+  },
+  {
+    "question": "¿Cuánto tiempo tarda el proceso de selección para un perfil gerencial?",
+    "relevant_sources": ["hiring-process-sla"],
+    "relevant_sections": ["Tiempos de entrega comprometidos por tipo de búsqueda"]
+  },
+  {
+    "question": "¿Qué incluye la línea de servicio de outsourcing de soporte al cliente?",
+    "relevant_sources": ["service-lines"],
+    "relevant_sections": ["Outsourcing de equipos de soporte al cliente"]
+  },
+  {
+    "question": "¿Cuál es el precio de un programa de formación corporativa de 8 semanas?",
+    "relevant_sources": ["pricing-model"],
+    "relevant_sections": ["Formación corporativa"]
+  },
+  {
+    "question": "¿Ofrecen descuentos si contratamos varias líneas de servicio?",
+    "relevant_sources": ["objection-handling", "pricing-model"],
+    "relevant_sections": ["Manejo de Objeciones Comunes de Prospectos"]
+  },
+  {
+    "question": "¿Qué pasa si el candidato que contratamos se va antes de 6 meses?",
+    "relevant_sources": ["pricing-model"],
+    "relevant_sections": ["Headhunting ejecutivo"]
+  },
+  {
+    "question": "¿Cuántos candidatos incluye la terna para una búsqueda de perfil ejecutivo?",
+    "relevant_sources": ["hiring-process-sla"],
+    "relevant_sections": ["Tiempos de entrega comprometidos por tipo de búsqueda"]
+  },
+  {
+    "question": "¿Cuál es el tamaño mínimo de equipo para contratar outsourcing de soporte?",
+    "relevant_sources": ["service-lines"],
+    "relevant_sections": ["Outsourcing de equipos de soporte al cliente"]
+  },
+  {
+    "question": "Un prospecto dice que el 22% es caro. ¿Cómo debería responder?",
+    "relevant_sources": ["objection-handling"],
+    "relevant_sections": ["Manejo de Objeciones Comunes de Prospectos"]
+  },
+  {
+    "question": "¿Nexova trabaja con empresas competidoras entre sí?",
+    "relevant_sources": ["objection-handling"],
+    "relevant_sections": ["Manejo de Objeciones Comunes de Prospectos"]
+  }
+]

@@ -49,6 +49,12 @@ export default function NavBar() {
                 Incidencias
               </Link>
               <Link
+                href="/knowledge"
+                className="rounded-full px-4 py-2 text-sm font-semibold text-slate-700 transition hover:text-brand"
+              >
+                Base conocimiento
+              </Link>
+              <Link
                 href="/reporting"
                 className="rounded-full px-4 py-2 text-sm font-semibold text-slate-700 transition hover:text-brand"
               >

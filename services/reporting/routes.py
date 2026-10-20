@@ -4,7 +4,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from data.pipelines.pipeline import (
+from data_project.pipelines.pipeline import (
     get_latest_pipeline_run,
     get_weekly_office_program_performance,
     latest_week_start,

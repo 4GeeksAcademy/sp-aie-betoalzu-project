@@ -7,7 +7,7 @@ from tinydb import TinyDB, Query
 from services.api.profiles.models import ProfileCreate, ProfileUpdate, ProfileOut
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
-_PROFILES_DB_PATH = _ROOT_DIR / "data" / "profiles_db.json"
+_PROFILES_DB_PATH = _ROOT_DIR / "data_project" / "profiles_db.json"
 
 
 def _get_db_path() -> Path:

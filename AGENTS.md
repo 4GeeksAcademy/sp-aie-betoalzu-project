@@ -38,8 +38,6 @@ El agente debe completar este flujo, en orden, antes de crear un commit:
 El agente no debe modificar las siguientes rutas sin confirmacion explicita:
 
 - memory-bank/
-- data/
-- docs/
 - agents/_template/
 - skills/_template/
 - apps/talent-pipeline-tracker/AGENTS.md

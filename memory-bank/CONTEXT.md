@@ -70,3 +70,8 @@ Eso implica evolucionar hacia:
 Este documento sirve como fuente de verdad contextual sobre Nexova Solutions, su situacion actual, sus prioridades y la logica empresarial detras del trabajo del equipo de AI Engineering.
 
 Su objetivo es alinear el desarrollo tecnico con la realidad de la empresa, dejando claro que las aplicaciones existentes en el repositorio son medios para resolver problemas concretos dentro de una transformacion organizacional mucho mas amplia.
+
+## Decision operativa RAG en Codespaces
+
+- Cuando Docker bridge carece de conectividad DNS y el host si puede acceder al proveedor, usar `docker compose -f docker-compose.yml -f docker-compose.codespaces.yml up -d backend qdrant`. La variante es opcional y esta destinada a Codespaces/Linux; el backend utiliza red de host y Qdrant mediante su puerto publicado local.
+- Las llamadas HTTP directas al proveedor generativo deben enviar el identificador exacto autorizado, sin el prefijo de cliente `litellm/`. La variante configura el mismo modelo DeepSeek seleccionado; las claves permanecen en la configuracion local y fuera del commit.

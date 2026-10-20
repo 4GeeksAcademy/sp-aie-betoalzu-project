@@ -52,7 +52,7 @@ def _derive_program(category: str) -> str | None:
     return program_map.get(category)
 
 _ROOT_DIR = Path(__file__).resolve().parents[3]
-_INVENTORY_DB_PATH = _ROOT_DIR / "data" / "inventory_db.json"
+_INVENTORY_DB_PATH = _ROOT_DIR / "data_project" / "inventory_db.json"
 
 
 def _utc_now_str() -> str:
