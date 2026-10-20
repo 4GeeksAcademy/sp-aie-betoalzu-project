@@ -113,3 +113,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se documento el arranque con ambos archivos Compose. El backend activo usa esta variante y responde HTTP 200 en `/docs`.
 - Validacion previa al commit: Compose y `git diff --check` pasan; el endpoint `/knowledge/query`, con autenticacion simulada y proveedores reales, responde HTTP 200 en 5,8 segundos. La prueba completa previa recupero cinco fragmentos de Qdrant.
 
+## Agente de soporte LangGraph — paso 1
+
+- Se añadio el grafo tipado del agente con rutas condicionales para validar preguntas, recuperar contexto, generar respuestas y abstenerse sin contexto.
+- Se añadieron checkpoints durables SQLite y trazas estructuradas por ejecucion; las trazas guardan referencias de fuentes/secciones y omiten contenido de chunks y detalles de excepciones.
+- Se declararon `langgraph` y `langgraph-checkpoint-sqlite` en `pyproject.toml` y `services/requirements.txt`.
+- Pruebas del grafo: `5 passed`; se verificaron las rutas, la separacion `retrieve`/`generate_answer`, la abstencion sin generacion, persistencia tras reabrir SQLite y trazas seguras ante fallos.
+- `uv.lock` no se actualizo porque el archivo esta restringido por la politica de exclusion de contenido de la organizacion.
