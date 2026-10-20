@@ -263,19 +263,19 @@ class SupportAgent:
             checkpointer=self.checkpointer,
         )
 
-    def invoke(self, question: str) -> AgentState:
-        run_id = str(uuid4())
+    def invoke(self, question: str, *, run_id: str | None = None) -> AgentState:
+        execution_id = run_id or str(uuid4())
         return self.graph.invoke(
             {
                 "question": question,
                 "context": [],
                 "answer": "",
                 "error": None,
-                "run_id": run_id,
+                "run_id": execution_id,
             },
             {
-                "configurable": {"thread_id": f"support-agent:{run_id}"},
-                "metadata": {"run_id": run_id},
+                "configurable": {"thread_id": f"support-agent:{execution_id}"},
+                "metadata": {"run_id": execution_id},
             },
         )
 

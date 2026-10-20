@@ -120,3 +120,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se declararon `langgraph` y `langgraph-checkpoint-sqlite` en `pyproject.toml` y `services/requirements.txt`.
 - Pruebas del grafo: `5 passed`; se verificaron las rutas, la separacion `retrieve`/`generate_answer`, la abstencion sin generacion, persistencia tras reabrir SQLite y trazas seguras ante fallos.
 - `uv.lock` no se actualizo porque el archivo esta restringido por la politica de exclusion de contenido de la organizacion.
+
+## Agente de soporte LangGraph — paso 2
+
+- Se integro el grafo al lifespan de FastAPI: compila e inicializa el almacen antes de aceptar requests y cierra el checkpointer al apagar.
+- Se añadieron `POST /agent/query` y `GET /agent/traces/{run_id}`, ambos autenticados. La pregunta vacia se traza y responde con 422; los fallos inesperados responden con mensaje generico y `run_id`.
+- `POST /knowledge/query` se mantuvo sin cambios de contrato.
+- Pruebas focalizadas de agente y conocimiento: `15 passed`, incluyendo autenticacion, respuesta, trazas, fallos genericos y lifecycle.
