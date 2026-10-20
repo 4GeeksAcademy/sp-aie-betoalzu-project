@@ -235,6 +235,24 @@ def build_support_graph(
     if not expected_nodes.issubset(compiled_nodes):
         missing = sorted(expected_nodes - compiled_nodes)
         raise RuntimeError(f"Support-agent graph is missing required nodes: {missing}")
+    expected_edges = {
+        ("__start__", "receive_question"),
+        ("receive_question", "retrieve_context"),
+        ("receive_question", "__end__"),
+        ("retrieve_context", "generate_response"),
+        ("retrieve_context", "answer_without_context"),
+        ("generate_response", "__end__"),
+        ("answer_without_context", "__end__"),
+    }
+    compiled_edges = {
+        (edge.source, edge.target)
+        for edge in graph.get_graph().edges
+    }
+    if not expected_edges.issubset(compiled_edges):
+        missing = sorted(expected_edges - compiled_edges)
+        raise RuntimeError(
+            f"Support-agent graph has missing or disconnected routes: {missing}"
+        )
     return graph
 
 

@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "pricing-policy",
+      "question": "¿Cuál es la tarifa estándar de headhunting?",
+      "api_status": 200,
+      "answer": "La tarifa estándar es del 22% del salario anual bruto del cargo contratado (pricing-model, Headhunting ejecutivo).",
+      "events": [
+        {"run_id": "fixture-pricing", "sequence": 1, "node_name": "receive_question", "status": "started", "timestamp": "2026-10-20T09:00:00+00:00", "output": {}},
+        {"run_id": "fixture-pricing", "sequence": 2, "node_name": "receive_question", "status": "completed", "timestamp": "2026-10-20T09:00:00+00:00", "output": {"valid": true}},
+        {"run_id": "fixture-pricing", "sequence": 3, "node_name": "retrieve_context", "status": "started", "timestamp": "2026-10-20T09:00:01+00:00", "output": {}},
+        {"run_id": "fixture-pricing", "sequence": 4, "node_name": "retrieve_context", "status": "completed", "timestamp": "2026-10-20T09:00:01+00:00", "output": {"chunk_count": 1, "references": [{"source_document": "pricing-model", "section": "Headhunting ejecutivo"}]}},
+        {"run_id": "fixture-pricing", "sequence": 5, "node_name": "generate_response", "status": "started", "timestamp": "2026-10-20T09:00:02+00:00", "output": {}},
+        {"run_id": "fixture-pricing", "sequence": 6, "node_name": "generate_response", "status": "completed", "timestamp": "2026-10-20T09:00:02+00:00", "output": {"answer": "La tarifa estándar es del 22% del salario anual bruto del cargo contratado (pricing-model, Headhunting ejecutivo)."}}
+      ]
+    },
+    {
+      "id": "blank-question",
+      "question": "   ",
+      "api_status": 422,
+      "answer": "",
+      "error": "question_required",
+      "events": [
+        {"run_id": "fixture-blank", "sequence": 1, "node_name": "receive_question", "status": "started", "timestamp": "2026-10-20T09:01:00+00:00", "output": {}},
+        {"run_id": "fixture-blank", "sequence": 2, "node_name": "receive_question", "status": "completed", "timestamp": "2026-10-20T09:01:00+00:00", "output": {"valid": false, "error": "question_required"}}
+      ]
+    },
+    {
+      "id": "no-matching-context",
+      "question": "¿Cuál es el horario de apertura de la oficina de Marte?",
+      "api_status": 200,
+      "answer": "Lo siento, la base de conocimiento no contiene información suficiente para responder esa pregunta.",
+      "events": [
+        {"run_id": "fixture-abstain", "sequence": 1, "node_name": "receive_question", "status": "started", "timestamp": "2026-10-20T09:02:00+00:00", "output": {}},
+        {"run_id": "fixture-abstain", "sequence": 2, "node_name": "receive_question", "status": "completed", "timestamp": "2026-10-20T09:02:00+00:00", "output": {"valid": true}},
+        {"run_id": "fixture-abstain", "sequence": 3, "node_name": "retrieve_context", "status": "started", "timestamp": "2026-10-20T09:02:01+00:00", "output": {}},
+        {"run_id": "fixture-abstain", "sequence": 4, "node_name": "retrieve_context", "status": "completed", "timestamp": "2026-10-20T09:02:01+00:00", "output": {"chunk_count": 0, "references": []}},
+        {"run_id": "fixture-abstain", "sequence": 5, "node_name": "answer_without_context", "status": "started", "timestamp": "2026-10-20T09:02:01+00:00", "output": {}},
+        {"run_id": "fixture-abstain", "sequence": 6, "node_name": "answer_without_context", "status": "completed", "timestamp": "2026-10-20T09:02:01+00:00", "output": {"reason": "no_context", "answer": "Lo siento, la base de conocimiento no contiene información suficiente para responder esa pregunta."}}
+      ]
+    }
+  ]
+}

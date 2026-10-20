@@ -127,3 +127,11 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadieron `POST /agent/query` y `GET /agent/traces/{run_id}`, ambos autenticados. La pregunta vacia se traza y responde con 422; los fallos inesperados responden con mensaje generico y `run_id`.
 - `POST /knowledge/query` se mantuvo sin cambios de contrato.
 - Pruebas focalizadas de agente y conocimiento: `15 passed`, incluyendo autenticacion, respuesta, trazas, fallos genericos y lifecycle.
+
+## Agente de soporte LangGraph — paso 3
+
+- Se añadieron tres fixtures de trazas sanitizadas y evaluaciones offline: respuesta con contexto y tarifa del 22%, pregunta vacia con 422 y abstencion por recuperacion vacia.
+- La evaluacion de pricing confirma el 22% contra `nexova-pricing-model.es.md`, y verifica la referencia `pricing-model / Headhunting ejecutivo` sin ejecutar Qdrant ni LLM.
+- Se documentaron dependencias, `SUPPORT_AGENT_DB_PATH`, persistencia y endpoints; Compose fija la base en `/app/data_project/support-agent.sqlite3`, persistida por el montaje existente de `data_project/`, y Git ignora ese archivo local.
+- `docker compose config --quiet` paso. Las pruebas del agente, Prefect y APIs terminaron en `30 passed`.
+- La ejecucion de regresion que incluyo `tests/pipelines/test_rag.py` termino en `36 passed, 3 failed`; son los fallos preexistentes documentados: el mock de Qdrant devuelve una lista mientras `rag.retrieve()` espera `.points`. No se modifico ni debilito esa suite.

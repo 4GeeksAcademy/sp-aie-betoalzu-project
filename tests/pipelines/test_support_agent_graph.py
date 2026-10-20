@@ -31,6 +31,22 @@ def test_conditional_routes_choose_expected_nodes() -> None:
     assert route_after_retrieve({"context": []}) == "answer_without_context"
 
 
+def test_compiled_graph_connects_every_route_to_an_exit(
+    create_agent: Callable[..., SupportAgent],
+) -> None:
+    agent = create_agent(retrieve_fn=lambda _question: [], generate_fn=lambda _q, _c: "")
+    graph = agent.graph.get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+
+    assert ("__start__", "receive_question") in edges
+    assert ("receive_question", "retrieve_context") in edges
+    assert ("receive_question", "__end__") in edges
+    assert ("retrieve_context", "generate_response") in edges
+    assert ("retrieve_context", "answer_without_context") in edges
+    assert ("generate_response", "__end__") in edges
+    assert ("answer_without_context", "__end__") in edges
+
+
 def test_valid_question_retrieves_then_generates_and_persists_state(
     create_agent: Callable[..., SupportAgent],
 ) -> None:
