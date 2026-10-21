@@ -135,3 +135,26 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se documentaron dependencias, `SUPPORT_AGENT_DB_PATH`, persistencia y endpoints; Compose fija la base en `/app/data_project/support-agent.sqlite3`, persistida por el montaje existente de `data_project/`, y Git ignora ese archivo local.
 - `docker compose config --quiet` paso. Las pruebas del agente, Prefect y APIs terminaron en `30 passed`.
 - La ejecucion de regresion que incluyo `tests/pipelines/test_rag.py` termino en `36 passed, 3 failed`; son los fallos preexistentes documentados: el mock de Qdrant devuelve una lista mientras `rag.retrieve()` espera `.points`. No se modifico ni debilito esa suite.
+
+## Tools del agente de soporte - paso 1
+
+- Se implementaron tools HTTP independientes y tipadas para incidentes e inventario, reutilizando los modelos reales; solo GET, timeout de 4 segundos y sin redirecciones.
+- Incidentes usa JWT de servicio desde el entorno; inventario conserva sus consultas publicas existentes. Se distinguen success, not_found y failed sin registrar credenciales ni respuestas crudas.
+- Se documento configuracion, filtros soportados y tratamiento de errores. Validacion: 14 pruebas offline aprobadas, Ruff y diff check correctos.
+- Revision previa al commit: alcance limitado a tools, sus pruebas, documentacion y este avance autorizado; sin secretos ni cambios en las demas rutas protegidas. La especificacion local no seguida queda fuera del commit.
+
+## Tools del agente de soporte - paso 2
+
+- Se integraron nodos independientes de incidentes e inventario y rutas condicionales segun la pregunta, incluyendo consultas mixtas con RAG sin reemplazar recuperacion ni generacion.
+- Las respuestas operativas se construyen exclusivamente con datos confirmados; los fallos y ausencias se indican por dominio. Cada fuente deja resultado y referencias seguras en la secuencia durable de trazas.
+- Se conserva la API autenticada, SQLite, el error HTTP de fallos RAG puros y el contrato de knowledge/query. En consultas mixtas los fallos conocidos del RAG no ocultan los resultados operativos confirmados.
+- Validacion: 23 pruebas focalizadas de grafo y APIs aprobadas, lint E9/F/I y diff check correctos. El lint completo detecto dos reglas antiguas fuera del cambio (UP017 y SIM117), sin modificarlas.
+- Revision previa al commit: solo grafo, routing, pruebas relacionadas, documentacion y avance autorizado; sin secretos ni cambios adicionales en rutas protegidas.
+
+## Tools del agente de soporte - paso 3
+
+- Se agregaron 11 casos versionados de routing offline y evaluaciones de las trazas persistidas tras cerrar el grafo: tickets, documentos, inventario, fuentes combinadas y fallback.
+- Se cubrieron filtros reales, identificador externo, SKU, timeout de la tool real con transporte simulado, fallos RAG mixtos y ausencia de datos inventados. Las evaluaciones bloquean HTTP externo y no requieren credenciales.
+- Una regresion detecto que AssetResponse asignaba cero cuando faltaba current_stock; la tool ahora rechaza ese contrato incompleto como invalid_response en lugar de confirmar stock no recibido.
+- Validacion combinada de agente, APIs, Prefect y RAG: 75 passed, 3 failed. Los tres fallos son los preexistentes de tests/pipelines/test_rag.py: FakeQdrantClient devuelve una lista mientras retrieve espera .points; no se modificaron el RAG ni sus pruebas.
+- Lint focalizado E9/F/I y diff check correctos. Revision previa al commit: solo evaluaciones, correccion acoplada del contrato de inventario, documentacion y este avance autorizado; sin secretos ni cambios en otras rutas protegidas.

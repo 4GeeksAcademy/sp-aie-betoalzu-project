@@ -72,3 +72,64 @@ El backend declara `langgraph` y `langgraph-checkpoint-sqlite` en `pyproject.tom
 `SUPPORT_AGENT_DB_PATH` configura el archivo de checkpoints y trazas. Por defecto es `data_project/support-agent.sqlite3`; Compose lo fija en `/app/data_project/support-agent.sqlite3` y monta `./data_project/` de forma persistente en esa ruta. Mantener el archivo en almacenamiento durable y con acceso restringido: los checkpoints conservan la pregunta, el contexto recuperado y la respuesta, mientras que las trazas exponen referencias de fuente y sección.
 
 `POST /agent/query` y `GET /agent/traces/{run_id}` requieren autenticación. La respuesta de consulta contiene `answer` y `run_id`; la traza se consulta por separado y no devuelve el estado completo del checkpoint. `POST /knowledge/query` sigue disponible con su contrato existente.
+
+### Tools de consulta operativa
+
+Las tools de incidentes e inventario usan exclusivamente `GET`, con timeout
+explícito de 4 segundos y sin seguir redirecciones. Reutilizan `IncidentOut`
+y `AssetResponse`; no mantienen una copia de los datos del servicio.
+
+- `SUPPORT_AGENT_BACKEND_URL`: URL base del backend (por defecto,
+  `http://127.0.0.1:8000`, también válido dentro del contenedor del backend).
+- `SUPPORT_AGENT_SERVICE_TOKEN`: JWT de servicio válido para consultar
+  `/api/incidents`, enviado como Bearer. Configurarlo en el entorno del
+  proceso; no incluirlo en prompts, repositorio ni trazas. Su ausencia produce
+  `failed / not_configured`; no se realiza una consulta anónima alternativa.
+- `/inventory/products` y `/inventory/products/{id}` no requieren
+  autenticación en el contrato actual; la tool no envía credenciales allí.
+
+Incidentes acepta ID interno, `ticket_id` externo y filtros reales de estado,
+categoría, sede y origen. Como la API no filtra `ticket_id`, la tool lo compara
+exactamente sobre la lista obtenida. Inventario acepta ID interno o búsqueda
+local por nombre/SKU sobre los productos obtenidos. Un listado vacío o un
+detalle con 404 produce `not_found`; timeout, contrato inválido y fallos HTTP
+producen `failed` con código seguro, nunca datos operativos supuestos.
+
+### Enrutamiento y trazas de las fuentes
+
+El nodo de entrada decide las fuentes a partir de identificadores, vocabulario
+operativo y términos documentales en la pregunta, sin necesitar un LLM para
+enrutar. Un estado de ticket va a `consult_incidents`; una consulta de stock,
+a `consult_inventory`; las preguntas documentales conservan la ruta RAG
+`retrieve_context -> generate_response | answer_without_context`. Las preguntas
+mixtas consultan incidentes, inventario y RAG, en ese orden, únicamente cuando
+se seleccionan esas fuentes. La decisión queda en la salida `sources` de
+`receive_question`.
+
+`compose_response` presenta los campos operativos confirmados de forma
+determinista, separados de la respuesta documental. Los errores y ausencias
+se expresan explícitamente, sin entregar datos ficticios al generador. En una
+consulta mixta, un fallo conocido del RAG conserva las fuentes operativas
+confirmadas e indica la indisponibilidad documental; las consultas únicamente
+RAG conservan el error HTTP controlado existente ante fallos de infraestructura.
+
+Los eventos de cada nodo de fuente incluyen `source` (`incidents`, `inventory`
+o `rag`) y `outcome` (`success`, `not_found`, `failed`) al terminar. La secuencia
+persistida permite reconstruir el orden. Las trazas operativas guardan solo
+referencias ID/ticket/SKU y códigos de error seguros, no registros completos,
+credenciales ni respuestas operativas. Los checkpoints conservan los resultados
+tipados serializados bajo los mismos controles de acceso existentes.
+
+### Evaluaciones offline
+
+```bash
+python -m pytest tests/pipelines/test_support_agent.py tests/pipelines/test_support_agent_graph.py tests/pipelines/test_support_agent_tools.py tests/pipelines/test_support_agent_routing.py -q
+```
+
+Las evaluaciones de routing usan preguntas versionadas y dobles de prueba,
+cierran el grafo y evalúan la traza SQLite persistida. Bloquean HTTP externo y
+no necesitan tokens, Qdrant ni LLM. Cubren tickets, documentos, productos,
+combinaciones de fuentes, ausencias, timeout y fallos de generación/recuperación.
+Los datos operativos ficticios existen únicamente en pruebas. También se
+verifica que el stock esté presente en la respuesta del servicio: el valor
+por defecto del modelo no constituye una confirmación de existencias.

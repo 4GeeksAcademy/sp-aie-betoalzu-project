@@ -1,0 +1,89 @@
+{
+  "description": "Offline routing cases. Operational responses are test doubles, never production data.",
+  "cases": [
+    {
+      "id": "ticket-only",
+      "question": "¿Cuál es el estado del ticket 17?",
+      "sources": ["incidents"],
+      "nodes": ["receive_question", "consult_incidents", "compose_response"],
+      "incident_status": "success",
+      "expected_text": "estado=in_progress"
+    },
+    {
+      "id": "document-only",
+      "question": "¿Cuál es la tarifa de selección de Nexova?",
+      "sources": ["rag"],
+      "nodes": ["receive_question", "retrieve_context", "generate_response"],
+      "expected_text": "22%"
+    },
+    {
+      "id": "document-about-incidents",
+      "question": "¿Cuál es el procedimiento para registrar incidencias?",
+      "sources": ["rag"],
+      "nodes": ["receive_question", "retrieve_context", "generate_response"],
+      "expected_text": "documentación"
+    },
+    {
+      "id": "ticket-and-document",
+      "question": "¿Cuál es el estado del ticket TKT-017 y qué SLA aplica?",
+      "sources": ["incidents", "rag"],
+      "nodes": ["receive_question", "consult_incidents", "retrieve_context", "generate_response", "compose_response"],
+      "incident_status": "success",
+      "expected_text": "estado=in_progress"
+    },
+    {
+      "id": "inventory-only",
+      "question": "¿Cuál es el stock del producto 3?",
+      "sources": ["inventory"],
+      "nodes": ["receive_question", "consult_inventory", "compose_response"],
+      "expected_text": "stock=8"
+    },
+    {
+      "id": "inventory-and-document",
+      "question": "Consulta el stock del producto 3 y la política de compras.",
+      "sources": ["inventory", "rag"],
+      "nodes": ["receive_question", "consult_inventory", "retrieve_context", "generate_response", "compose_response"],
+      "expected_text": "stock=8"
+    },
+    {
+      "id": "two-operational-sources",
+      "question": "Consulta el estado del ticket 17 y el stock del producto 3.",
+      "sources": ["incidents", "inventory"],
+      "nodes": ["receive_question", "consult_incidents", "consult_inventory", "compose_response"],
+      "incident_status": "success",
+      "expected_text": "stock=8"
+    },
+    {
+      "id": "all-sources",
+      "question": "Consulta el ticket 17, el stock del producto 3 y el procedimiento de soporte.",
+      "sources": ["incidents", "inventory", "rag"],
+      "nodes": ["receive_question", "consult_incidents", "consult_inventory", "retrieve_context", "generate_response", "compose_response"],
+      "incident_status": "success",
+      "expected_text": "Información documental"
+    },
+    {
+      "id": "ticket-service-unavailable",
+      "question": "¿Cuál es el estado del ticket 17?",
+      "sources": ["incidents"],
+      "nodes": ["receive_question", "consult_incidents", "compose_response"],
+      "incident_status": "failed",
+      "expected_text": "No pude confirmar"
+    },
+    {
+      "id": "ticket-not-found",
+      "question": "¿Cuál es el estado del ticket 17?",
+      "sources": ["incidents"],
+      "nodes": ["receive_question", "consult_incidents", "compose_response"],
+      "incident_status": "not_found",
+      "expected_text": "No encontré tickets"
+    },
+    {
+      "id": "failed-ticket-with-documents",
+      "question": "Consulta el estado del ticket 17 y el SLA de soporte.",
+      "sources": ["incidents", "rag"],
+      "nodes": ["receive_question", "consult_incidents", "retrieve_context", "generate_response", "compose_response"],
+      "incident_status": "failed",
+      "expected_text": "No pude confirmar"
+    }
+  ]
+}

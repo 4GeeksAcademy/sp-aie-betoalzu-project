@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from collections.abc import Callable
@@ -9,10 +10,24 @@ from pathlib import Path
 from typing import Any, TypedDict
 from uuid import uuid4
 
+import requests
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
+from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from data_project.pipelines.rag import generate_answer, retrieve
+from services.agent.routing import QueryPlan, Source, plan_question
+from services.agent.tools import (
+    IncidentQuery,
+    IncidentResult,
+    InventoryQuery,
+    InventoryResult,
+    query_incidents,
+    query_inventory,
+)
+
+logger = logging.getLogger(__name__)
+RAG_FAILURES = (RuntimeError, requests.RequestException, UnexpectedResponse, ResponseHandlingException)
 
 
 class AgentState(TypedDict):
@@ -21,6 +36,10 @@ class AgentState(TypedDict):
     answer: str
     error: str | None
     run_id: str
+    plan: QueryPlan
+    incident_result: dict[str, Any]
+    inventory_result: dict[str, Any]
+    rag_status: str
 
 
 class TraceEvent(TypedDict):
@@ -117,9 +136,11 @@ def _traced_node(
     node_name: str,
     operation: NodeOperation,
     traces: TraceStore,
+    source: Source | None = None,
 ) -> Callable[[AgentState], dict[str, Any]]:
     def run(state: AgentState) -> dict[str, Any]:
-        traces.record(state["run_id"], node_name, "started", {})
+        source_output = {"source": source} if source else {}
+        traces.record(state["run_id"], node_name, "started", source_output)
         try:
             update, output = operation(state)
         except Exception:
@@ -127,10 +148,10 @@ def _traced_node(
                 state["run_id"],
                 node_name,
                 "failed",
-                {"error": "node_failed"},
+                {**source_output, "outcome": "failed", "error": "node_failed"},
             )
             raise
-        traces.record(state["run_id"], node_name, "completed", output)
+        traces.record(state["run_id"], node_name, "completed", {**source_output, **output})
         return update
 
     return run
@@ -149,7 +170,29 @@ def _chunk_references(context: list[dict[str, Any]]) -> list[dict[str, str | int
 
 
 def route_after_receive(state: AgentState) -> str:
-    return "end" if state.get("error") else "retrieve_context"
+    if state.get("error"):
+        return "end"
+    sources = state.get("plan", {}).get("sources", ["rag"])
+    if "incidents" in sources:
+        return "consult_incidents"
+    if "inventory" in sources:
+        return "consult_inventory"
+    return "retrieve_context"
+
+
+def route_after_incidents(state: AgentState) -> str:
+    if "inventory" in state["plan"]["sources"]:
+        return "consult_inventory"
+    return route_after_inventory(state)
+
+
+def route_after_inventory(state: AgentState) -> str:
+    return "retrieve_context" if "rag" in state["plan"]["sources"] else "compose_response"
+
+
+def route_after_answer(state: AgentState) -> str:
+    sources = state.get("plan", {}).get("sources", ["rag"])
+    return "compose_response" if any(source != "rag" for source in sources) else "end"
 
 
 def route_after_retrieve(state: AgentState) -> str:
@@ -161,34 +204,123 @@ def build_support_graph(
     *,
     retrieve_fn: Callable[[str], list[dict[str, Any]]] = retrieve,
     generate_fn: Callable[[str, list[dict[str, Any]]], str] = generate_answer,
+    incidents_fn: Callable[[IncidentQuery], IncidentResult] = query_incidents,
+    inventory_fn: Callable[[InventoryQuery], InventoryResult] = query_inventory,
     checkpointer: SqliteSaver,
 ):
     def receive_question(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
         valid = bool(state["question"].strip())
         error = None if valid else "question_required"
-        return {"error": error}, {"valid": valid, **({"error": error} if error else {})}
+        if not valid:
+            return {"error": error}, {"valid": False, "error": error}
+        plan = plan_question(state["question"])
+        return {"error": None, "plan": plan}, {"valid": True, "sources": plan["sources"]}
+
+    def consult_incidents(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
+        result = incidents_fn(IncidentQuery.model_validate(state["plan"]["incident_query"]))
+        return {"incident_result": result.model_dump(mode="json")}, {
+            "outcome": result.status,
+            "references": [
+                {"id": item.id, "ticket_id": item.ticket_id}
+                for item in result.incidents
+            ],
+            "error": result.error,
+        }
+
+    def consult_inventory(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
+        result = inventory_fn(InventoryQuery.model_validate(state["plan"]["inventory_query"]))
+        return {"inventory_result": result.model_dump(mode="json")}, {
+            "outcome": result.status,
+            "references": [{"id": item.id, "sku": item.sku} for item in result.products],
+            "error": result.error,
+        }
 
     def retrieve_context(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
-        context = retrieve_fn(state["question"].strip())
-        return {"context": context}, {
+        try:
+            context = retrieve_fn(state["question"].strip())
+        except RAG_FAILURES:
+            if route_after_answer(state) == "end":
+                raise
+            logger.warning("Support-agent source failed (source=rag, stage=retrieve)")
+            return {"context": [], "rag_status": "failed"}, {
+                "outcome": "failed", "error": "source_failed", "references": [],
+            }
+        outcome = "success" if context else "not_found"
+        return {"context": context, "rag_status": outcome}, {
+            "outcome": outcome,
             "chunk_count": len(context),
             "references": _chunk_references(context),
         }
 
     def generate_response(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
-        answer = generate_fn(state["question"].strip(), state["context"]).strip()
-        if not answer:
-            raise RuntimeError("RAG generation returned an empty answer.")
-        return {"answer": answer}, {"answer": answer}
+        question = state["question"].strip()
+        mixed = route_after_answer(state) != "end"
+        if mixed:
+            question = (
+                "Explica solo el conocimiento documental aplicable, sin afirmar "
+                "estados actuales de tickets ni stock de productos. Consulta: " + question
+            )
+        try:
+            answer = generate_fn(question, state["context"]).strip()
+            if not answer:
+                raise RuntimeError("RAG generation returned an empty answer.")
+        except RAG_FAILURES:
+            if not mixed:
+                raise
+            logger.warning("Support-agent source failed (source=rag, stage=generate)")
+            return {
+                "answer": "No pude consultar la información documental ahora mismo.",
+                "rag_status": "failed",
+            }, {"outcome": "failed", "error": "source_failed"}
+        return {"answer": answer}, {"outcome": "success", **(
+            {"answer_length": len(answer)} if mixed else {"answer": answer}
+        )}
 
     def answer_without_context(
-        _state: AgentState,
+        state: AgentState,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        answer = (
+        failed = state.get("rag_status") == "failed"
+        answer = "No pude consultar la información documental ahora mismo." if failed else (
             "Lo siento, la base de conocimiento no contiene información "
             "suficiente para responder esa pregunta."
         )
-        return {"answer": answer}, {"reason": "no_context", "answer": answer}
+        return {"answer": answer}, {
+            "outcome": "failed" if failed else "not_found",
+            "reason": "source_failed" if failed else "no_context", "answer": answer,
+        }
+
+    def compose_response(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
+        parts: list[str] = []
+        sources = state["plan"]["sources"]
+        if "incidents" in sources:
+            incidents = IncidentResult.model_validate(state["incident_result"])
+            if incidents.status == "failed":
+                parts.append("No pude confirmar los datos ni el estado de los tickets ahora mismo.")
+            elif incidents.status == "not_found":
+                parts.append("No encontré tickets que coincidan con la consulta; no puedo confirmar su estado.")
+            else:
+                parts.append("Incidentes confirmados (fuente: incidents):\n" + "\n".join(
+                    f"- Ticket {item.ticket_id or item.id} (ID {item.id}): "
+                    f"estado={item.status}; categoría={item.category}; origen={item.origin}; "
+                    f"sede={item.branch}; creado={item.created_at}; actualizado={item.updated_at}."
+                    for item in incidents.incidents
+                ))
+        if "inventory" in sources:
+            inventory = InventoryResult.model_validate(state["inventory_result"])
+            if inventory.status == "failed":
+                parts.append("No pude confirmar el stock del inventario ahora mismo.")
+            elif inventory.status == "not_found":
+                parts.append("No encontré productos que coincidan; no puedo confirmar su stock.")
+            else:
+                parts.append("Inventario confirmado (fuente: inventory):\n" + "\n".join(
+                    f"- Producto {item.id}: {item.name} ({item.sku}); "
+                    f"stock={item.current_stock}; sede={item.office.value}."
+                    for item in inventory.products
+                ))
+        if "rag" in sources:
+            parts.append("Información documental (fuente: rag):\n" + state["answer"])
+        answer = "\n\n".join(parts)
+        return {"answer": answer}, {"sources": sources, "answer_length": len(answer)}
 
     builder = StateGraph(AgentState)
     builder.add_node(
@@ -197,22 +329,40 @@ def build_support_graph(
     )
     builder.add_node(
         "retrieve_context",
-        _traced_node("retrieve_context", retrieve_context, traces),
+        _traced_node("retrieve_context", retrieve_context, traces, "rag"),
     )
     builder.add_node(
         "generate_response",
-        _traced_node("generate_response", generate_response, traces),
+        _traced_node("generate_response", generate_response, traces, "rag"),
     )
     builder.add_node(
         "answer_without_context",
-        _traced_node("answer_without_context", answer_without_context, traces),
+        _traced_node("answer_without_context", answer_without_context, traces, "rag"),
     )
+    builder.add_node("consult_incidents", _traced_node(
+        "consult_incidents", consult_incidents, traces, "incidents",
+    ))
+    builder.add_node("consult_inventory", _traced_node(
+        "consult_inventory", consult_inventory, traces, "inventory",
+    ))
+    builder.add_node("compose_response", _traced_node(
+        "compose_response", compose_response, traces,
+    ))
     builder.add_edge(START, "receive_question")
     builder.add_conditional_edges(
         "receive_question",
         route_after_receive,
-        {"retrieve_context": "retrieve_context", "end": END},
+        {
+            "retrieve_context": "retrieve_context", "end": END,
+            "consult_incidents": "consult_incidents", "consult_inventory": "consult_inventory",
+        },
     )
+    builder.add_conditional_edges("consult_incidents", route_after_incidents, {
+        node: node for node in ("consult_inventory", "retrieve_context", "compose_response")
+    })
+    builder.add_conditional_edges("consult_inventory", route_after_inventory, {
+        node: node for node in ("retrieve_context", "compose_response")
+    })
     builder.add_conditional_edges(
         "retrieve_context",
         route_after_retrieve,
@@ -221,8 +371,11 @@ def build_support_graph(
             "answer_without_context": "answer_without_context",
         },
     )
-    builder.add_edge("generate_response", END)
-    builder.add_edge("answer_without_context", END)
+    for node in ("generate_response", "answer_without_context"):
+        builder.add_conditional_edges(node, route_after_answer, {
+            "compose_response": "compose_response", "end": END,
+        })
+    builder.add_edge("compose_response", END)
 
     graph = builder.compile(checkpointer=checkpointer)
     expected_nodes = {
@@ -230,6 +383,9 @@ def build_support_graph(
         "retrieve_context",
         "generate_response",
         "answer_without_context",
+        "consult_incidents",
+        "consult_inventory",
+        "compose_response",
     }
     compiled_nodes = set(graph.get_graph().nodes)
     if not expected_nodes.issubset(compiled_nodes):
@@ -243,6 +399,16 @@ def build_support_graph(
         ("retrieve_context", "answer_without_context"),
         ("generate_response", "__end__"),
         ("answer_without_context", "__end__"),
+        ("receive_question", "consult_incidents"),
+        ("receive_question", "consult_inventory"),
+        ("consult_incidents", "consult_inventory"),
+        ("consult_incidents", "retrieve_context"),
+        ("consult_incidents", "compose_response"),
+        ("consult_inventory", "retrieve_context"),
+        ("consult_inventory", "compose_response"),
+        ("generate_response", "compose_response"),
+        ("answer_without_context", "compose_response"),
+        ("compose_response", "__end__"),
     }
     compiled_edges = {
         (edge.source, edge.target)
@@ -263,6 +429,8 @@ class SupportAgent:
         *,
         retrieve_fn: Callable[[str], list[dict[str, Any]]] = retrieve,
         generate_fn: Callable[[str, list[dict[str, Any]]], str] = generate_answer,
+        incidents_fn: Callable[[IncidentQuery], IncidentResult] = query_incidents,
+        inventory_fn: Callable[[InventoryQuery], InventoryResult] = query_inventory,
     ) -> None:
         self.database_path = Path(database_path).expanduser().resolve()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -278,6 +446,8 @@ class SupportAgent:
             self.traces,
             retrieve_fn=retrieve_fn,
             generate_fn=generate_fn,
+            incidents_fn=incidents_fn,
+            inventory_fn=inventory_fn,
             checkpointer=self.checkpointer,
         )
 
