@@ -135,3 +135,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se documentaron dependencias, `SUPPORT_AGENT_DB_PATH`, persistencia y endpoints; Compose fija la base en `/app/data_project/support-agent.sqlite3`, persistida por el montaje existente de `data_project/`, y Git ignora ese archivo local.
 - `docker compose config --quiet` paso. Las pruebas del agente, Prefect y APIs terminaron en `30 passed`.
 - La ejecucion de regresion que incluyo `tests/pipelines/test_rag.py` termino en `36 passed, 3 failed`; son los fallos preexistentes documentados: el mock de Qdrant devuelve una lista mientras `rag.retrieve()` espera `.points`. No se modifico ni debilito esa suite.
+
+## Tools del agente de soporte - paso 1
+
+- Se implementaron tools HTTP independientes y tipadas para incidentes e inventario, reutilizando los modelos reales; solo GET, timeout de 4 segundos y sin redirecciones.
+- Incidentes usa JWT de servicio desde el entorno; inventario conserva sus consultas publicas existentes. Se distinguen success, not_found y failed sin registrar credenciales ni respuestas crudas.
+- Se documento configuracion, filtros soportados y tratamiento de errores. Validacion: 14 pruebas offline aprobadas, Ruff y diff check correctos.
+- Revision previa al commit: alcance limitado a tools, sus pruebas, documentacion y este avance autorizado; sin secretos ni cambios en las demas rutas protegidas. La especificacion local no seguida queda fuera del commit.
