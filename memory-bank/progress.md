@@ -142,3 +142,11 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Incidentes usa JWT de servicio desde el entorno; inventario conserva sus consultas publicas existentes. Se distinguen success, not_found y failed sin registrar credenciales ni respuestas crudas.
 - Se documento configuracion, filtros soportados y tratamiento de errores. Validacion: 14 pruebas offline aprobadas, Ruff y diff check correctos.
 - Revision previa al commit: alcance limitado a tools, sus pruebas, documentacion y este avance autorizado; sin secretos ni cambios en las demas rutas protegidas. La especificacion local no seguida queda fuera del commit.
+
+## Tools del agente de soporte - paso 2
+
+- Se integraron nodos independientes de incidentes e inventario y rutas condicionales segun la pregunta, incluyendo consultas mixtas con RAG sin reemplazar recuperacion ni generacion.
+- Las respuestas operativas se construyen exclusivamente con datos confirmados; los fallos y ausencias se indican por dominio. Cada fuente deja resultado y referencias seguras en la secuencia durable de trazas.
+- Se conserva la API autenticada, SQLite, el error HTTP de fallos RAG puros y el contrato de knowledge/query. En consultas mixtas los fallos conocidos del RAG no ocultan los resultados operativos confirmados.
+- Validacion: 23 pruebas focalizadas de grafo y APIs aprobadas, lint E9/F/I y diff check correctos. El lint completo detecto dos reglas antiguas fuera del cambio (UP017 y SIM117), sin modificarlas.
+- Revision previa al commit: solo grafo, routing, pruebas relacionadas, documentacion y avance autorizado; sin secretos ni cambios adicionales en rutas protegidas.

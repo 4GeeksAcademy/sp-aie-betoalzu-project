@@ -94,3 +94,28 @@ exactamente sobre la lista obtenida. Inventario acepta ID interno o búsqueda
 local por nombre/SKU sobre los productos obtenidos. Un listado vacío o un
 detalle con 404 produce `not_found`; timeout, contrato inválido y fallos HTTP
 producen `failed` con código seguro, nunca datos operativos supuestos.
+
+### Enrutamiento y trazas de las fuentes
+
+El nodo de entrada decide las fuentes a partir de identificadores, vocabulario
+operativo y términos documentales en la pregunta, sin necesitar un LLM para
+enrutar. Un estado de ticket va a `consult_incidents`; una consulta de stock,
+a `consult_inventory`; las preguntas documentales conservan la ruta RAG
+`retrieve_context -> generate_response | answer_without_context`. Las preguntas
+mixtas consultan incidentes, inventario y RAG, en ese orden, únicamente cuando
+se seleccionan esas fuentes. La decisión queda en la salida `sources` de
+`receive_question`.
+
+`compose_response` presenta los campos operativos confirmados de forma
+determinista, separados de la respuesta documental. Los errores y ausencias
+se expresan explícitamente, sin entregar datos ficticios al generador. En una
+consulta mixta, un fallo conocido del RAG conserva las fuentes operativas
+confirmadas e indica la indisponibilidad documental; las consultas únicamente
+RAG conservan el error HTTP controlado existente ante fallos de infraestructura.
+
+Los eventos de cada nodo de fuente incluyen `source` (`incidents`, `inventory`
+o `rag`) y `outcome` (`success`, `not_found`, `failed`) al terminar. La secuencia
+persistida permite reconstruir el orden. Las trazas operativas guardan solo
+referencias ID/ticket/SKU y códigos de error seguros, no registros completos,
+credenciales ni respuestas operativas. Los checkpoints conservan los resultados
+tipados serializados bajo los mismos controles de acceso existentes.
