@@ -159,3 +159,12 @@ def test_inventory_detail_contract(http_get, product):
     result = query_inventory(InventoryQuery(product_id=3))
     assert result.products[0] == AssetResponse.model_validate(product)
     assert http_get.call_args.args[0].endswith("/inventory/products/3")
+
+
+def test_missing_stock_is_not_confirmed_as_zero(http_get, product):
+    del product["current_stock"]
+    http_get.return_value.json.return_value = product
+    result = query_inventory(InventoryQuery(product_id=3))
+    assert result.status == "failed"
+    assert result.error == "invalid_response"
+    assert result.products == []

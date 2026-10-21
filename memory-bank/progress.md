@@ -150,3 +150,11 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se conserva la API autenticada, SQLite, el error HTTP de fallos RAG puros y el contrato de knowledge/query. En consultas mixtas los fallos conocidos del RAG no ocultan los resultados operativos confirmados.
 - Validacion: 23 pruebas focalizadas de grafo y APIs aprobadas, lint E9/F/I y diff check correctos. El lint completo detecto dos reglas antiguas fuera del cambio (UP017 y SIM117), sin modificarlas.
 - Revision previa al commit: solo grafo, routing, pruebas relacionadas, documentacion y avance autorizado; sin secretos ni cambios adicionales en rutas protegidas.
+
+## Tools del agente de soporte - paso 3
+
+- Se agregaron 11 casos versionados de routing offline y evaluaciones de las trazas persistidas tras cerrar el grafo: tickets, documentos, inventario, fuentes combinadas y fallback.
+- Se cubrieron filtros reales, identificador externo, SKU, timeout de la tool real con transporte simulado, fallos RAG mixtos y ausencia de datos inventados. Las evaluaciones bloquean HTTP externo y no requieren credenciales.
+- Una regresion detecto que AssetResponse asignaba cero cuando faltaba current_stock; la tool ahora rechaza ese contrato incompleto como invalid_response en lugar de confirmar stock no recibido.
+- Validacion combinada de agente, APIs, Prefect y RAG: 75 passed, 3 failed. Los tres fallos son los preexistentes de tests/pipelines/test_rag.py: FakeQdrantClient devuelve una lista mientras retrieve espera .points; no se modificaron el RAG ni sus pruebas.
+- Lint focalizado E9/F/I y diff check correctos. Revision previa al commit: solo evaluaciones, correccion acoplada del contrato de inventario, documentacion y este avance autorizado; sin secretos ni cambios en otras rutas protegidas.

@@ -119,3 +119,17 @@ persistida permite reconstruir el orden. Las trazas operativas guardan solo
 referencias ID/ticket/SKU y códigos de error seguros, no registros completos,
 credenciales ni respuestas operativas. Los checkpoints conservan los resultados
 tipados serializados bajo los mismos controles de acceso existentes.
+
+### Evaluaciones offline
+
+```bash
+python -m pytest tests/pipelines/test_support_agent.py tests/pipelines/test_support_agent_graph.py tests/pipelines/test_support_agent_tools.py tests/pipelines/test_support_agent_routing.py -q
+```
+
+Las evaluaciones de routing usan preguntas versionadas y dobles de prueba,
+cierran el grafo y evalúan la traza SQLite persistida. Bloquean HTTP externo y
+no necesitan tokens, Qdrant ni LLM. Cubren tickets, documentos, productos,
+combinaciones de fuentes, ausencias, timeout y fallos de generación/recuperación.
+Los datos operativos ficticios existen únicamente en pruebas. También se
+verifica que el stock esté presente en la respuesta del servicio: el valor
+por defecto del modelo no constituye una confirmación de existencias.

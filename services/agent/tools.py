@@ -157,6 +157,8 @@ def query_inventory(query: InventoryQuery) -> InventoryResult:
                 if query.product_id is not None
                 else TypeAdapter(list[AssetResponse]).validate_python(payload)
             )
+            if any("current_stock" not in item.model_fields_set for item in products):
+                raise _SourceFailure("invalid_response")
         if query.search:
             search = query.search.casefold()
             products = [
