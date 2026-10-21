@@ -64,3 +64,11 @@ El ID configurado es `madrid-spain/openrouter/perplexity/pplx-embed-v1-0.6b` con
 ## Validación de conectividad
 
 `docker compose up -d qdrant` publica Qdrant en el host y en la red de Compose. En esta sesión, Qdrant respondió HTTP 200 en `http://localhost:6333/` después de iniciar el servicio. Para detenerlo, usar `docker compose stop qdrant`.
+
+## Agente de soporte LangGraph
+
+El backend declara `langgraph` y `langgraph-checkpoint-sqlite` en `pyproject.toml` y `services/requirements.txt`. Al iniciar FastAPI, el grafo se compila y se conecta al almacén SQLite antes de aceptar consultas.
+
+`SUPPORT_AGENT_DB_PATH` configura el archivo de checkpoints y trazas. Por defecto es `data_project/support-agent.sqlite3`; Compose lo fija en `/app/data_project/support-agent.sqlite3` y monta `./data_project/` de forma persistente en esa ruta. Mantener el archivo en almacenamiento durable y con acceso restringido: los checkpoints conservan la pregunta, el contexto recuperado y la respuesta, mientras que las trazas exponen referencias de fuente y sección.
+
+`POST /agent/query` y `GET /agent/traces/{run_id}` requieren autenticación. La respuesta de consulta contiene `answer` y `run_id`; la traza se consulta por separado y no devuelve el estado completo del checkpoint. `POST /knowledge/query` sigue disponible con su contrato existente.

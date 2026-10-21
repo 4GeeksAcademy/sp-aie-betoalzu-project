@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+import logging
+from typing import Any
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
+
+from services.agent.support import TraceEvent, get_support_agent
+from services.api.users.auth import get_current_user
+from services.api.users.models import UserInDB
+
+logger = logging.getLogger(__name__)
+
+agent_api = APIRouter(prefix="/agent", tags=["support-agent"])
+
+
+class AgentQueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(
+        max_length=2000,
+        description="Pregunta sobre servicios, precios o procesos de Nexova.",
+    )
+
+
+class AgentQueryResponse(BaseModel):
+    answer: str
+    run_id: str
+
+
+class AgentTraceEvent(BaseModel):
+    run_id: str
+    sequence: int
+    node_name: str
+    status: str
+    timestamp: str
+    output: dict[str, Any]
+
+
+class AgentTraceResponse(BaseModel):
+    run_id: str
+    events: list[AgentTraceEvent]
+
+
+@agent_api.post("/query", response_model=AgentQueryResponse)
+def query_agent(
+    body: AgentQueryRequest,
+    _: UserInDB = Depends(get_current_user),
+) -> AgentQueryResponse:
+    run_id = str(uuid4())
+    try:
+        result = get_support_agent().invoke(body.question, run_id=run_id)
+    except Exception as exc:
+        logger.error(
+            "Support-agent execution failed (run_id=%s, error_type=%s)",
+            run_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "No se pudo completar la consulta. Usa el run_id para investigar.",
+                "run_id": run_id,
+            },
+        ) from exc
+
+    if result["error"] == "question_required":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "La pregunta no puede estar vacía.",
+                "run_id": run_id,
+            },
+        )
+
+    return AgentQueryResponse(answer=result["answer"], run_id=run_id)
+
+
+@agent_api.get("/traces/{run_id}", response_model=AgentTraceResponse)
+def read_agent_trace(
+    run_id: str,
+    _: UserInDB = Depends(get_current_user),
+) -> AgentTraceResponse:
+    events: list[TraceEvent] = get_support_agent().get_trace(run_id)
+    if not events:
+        raise HTTPException(status_code=404, detail="Trace not found.")
+    return AgentTraceResponse(run_id=run_id, events=events)

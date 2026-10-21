@@ -3,3 +3,4 @@
 **/.env.local
 **/__pycache__/
 **/node_modules/
+/data_project/support-agent.sqlite3

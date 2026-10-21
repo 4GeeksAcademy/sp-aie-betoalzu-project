@@ -12,6 +12,8 @@ psycopg2-binary>=2.9.12
 pandas>=2.2.0
 prefect>=3
 qdrant-client>=1.16.2
+langgraph>=0.2.0
+langgraph-checkpoint-sqlite>=2.0.0
 
 [dev]
 pytest>=7.0

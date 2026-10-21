@@ -113,3 +113,25 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se documento el arranque con ambos archivos Compose. El backend activo usa esta variante y responde HTTP 200 en `/docs`.
 - Validacion previa al commit: Compose y `git diff --check` pasan; el endpoint `/knowledge/query`, con autenticacion simulada y proveedores reales, responde HTTP 200 en 5,8 segundos. La prueba completa previa recupero cinco fragmentos de Qdrant.
 
+## Agente de soporte LangGraph — paso 1
+
+- Se añadio el grafo tipado del agente con rutas condicionales para validar preguntas, recuperar contexto, generar respuestas y abstenerse sin contexto.
+- Se añadieron checkpoints durables SQLite y trazas estructuradas por ejecucion; las trazas guardan referencias de fuentes/secciones y omiten contenido de chunks y detalles de excepciones.
+- Se declararon `langgraph` y `langgraph-checkpoint-sqlite` en `pyproject.toml` y `services/requirements.txt`.
+- Pruebas del grafo: `5 passed`; se verificaron las rutas, la separacion `retrieve`/`generate_answer`, la abstencion sin generacion, persistencia tras reabrir SQLite y trazas seguras ante fallos.
+- `uv.lock` no se actualizo porque el archivo esta restringido por la politica de exclusion de contenido de la organizacion.
+
+## Agente de soporte LangGraph — paso 2
+
+- Se integro el grafo al lifespan de FastAPI: compila e inicializa el almacen antes de aceptar requests y cierra el checkpointer al apagar.
+- Se añadieron `POST /agent/query` y `GET /agent/traces/{run_id}`, ambos autenticados. La pregunta vacia se traza y responde con 422; los fallos inesperados responden con mensaje generico y `run_id`.
+- `POST /knowledge/query` se mantuvo sin cambios de contrato.
+- Pruebas focalizadas de agente y conocimiento: `15 passed`, incluyendo autenticacion, respuesta, trazas, fallos genericos y lifecycle.
+
+## Agente de soporte LangGraph — paso 3
+
+- Se añadieron tres fixtures de trazas sanitizadas y evaluaciones offline: respuesta con contexto y tarifa del 22%, pregunta vacia con 422 y abstencion por recuperacion vacia.
+- La evaluacion de pricing confirma el 22% contra `nexova-pricing-model.es.md`, y verifica la referencia `pricing-model / Headhunting ejecutivo` sin ejecutar Qdrant ni LLM.
+- Se documentaron dependencias, `SUPPORT_AGENT_DB_PATH`, persistencia y endpoints; Compose fija la base en `/app/data_project/support-agent.sqlite3`, persistida por el montaje existente de `data_project/`, y Git ignora ese archivo local.
+- `docker compose config --quiet` paso. Las pruebas del agente, Prefect y APIs terminaron en `30 passed`.
+- La ejecucion de regresion que incluyo `tests/pipelines/test_rag.py` termino en `36 passed, 3 failed`; son los fallos preexistentes documentados: el mock de Qdrant devuelve una lista mientras `rag.retrieve()` espera `.points`. No se modifico ni debilito esa suite.
