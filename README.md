@@ -1,94 +1,120 @@
-# AI Engineering Company Project — Student Template
+# Nexova Solutions — AI Engineering
 
-[![4Geeks Academy](https://img.shields.io/badge/4Geeks-Academy-blue)](https://4geeksacademy.com)
-[![AI Engineering](https://img.shields.io/badge/track-AI%20Engineering-green)](https://4geeksacademy.com/es/programas-de-carrera/ingenieria-ia)
+Monorepositorio de herramientas para modernizar procesos de Nexova Solutions, consultora de recursos humanos y seleccion de talento. El proyecto combina aplicaciones web, servicios backend y componentes de datos e IA para resolver necesidades operativas concretas.
 
-_Base template for transversal projects in the AI Engineering Career Program — 4Geeks Academy._
+## Resumen ejecutivo
 
-> _Instrucciones disponibles en español en [README.es.md](./README.es.md)._
+La primera solucion de producto es **Talent Pipeline Tracker**, una aplicacion para centralizar el seguimiento de candidaturas y reducir el uso de hojas de calculo desconectadas. El repositorio tambien incluye herramientas para gestionar incidencias, inventario y proveedores, consultar telemetria y generar reportes.
 
----
+La plataforma incorpora una base para busqueda semantica con RAG sobre conocimiento de la empresa y un agente de soporte capaz de combinar ese contexto con consultas operativas. Estas capacidades dependen de la configuracion de Qdrant y de los proveedores externos correspondientes.
 
-## Purpose
+## Tecnologia
 
-This repository is the **starter template** for transversal projects. You will work on real company scenarios (Brasaland, TrackFlow, Nexova), building deliverables that map to course milestones (Web, Programming, Backend, Telemetry, RAG, Agents, Workflows, Real-time).
+| Area | Tecnologias |
+| --- | --- |
+| Backoffice | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4 |
+| Website | HTML/CSS y Tailwind CSS 4 |
+| Backend y API | Python 3.11, FastAPI, Pydantic, SQLModel |
+| Datos y reporting | SQLite/TinyDB, PostgreSQL (configurable), pandas, Prefect |
+| IA y busqueda | Qdrant, RAG, LangGraph y proveedores compatibles con API OpenAI |
+| Calidad y despliegue | pytest, ESLint, Docker Compose |
 
-- Create a template from this repository.
-- Replace the placeholder `CONTEXT.md` with your assigned company context.
-- Use `skills/` and the directory-level `README.md` files as working guidance.
-
----
-
-## Current status of the template
-
-The repository currently provides a **base folder structure and documentation skeleton**. It does not include runnable apps or global scripts yet.
-
-- `CONTEXT.md` is a placeholder and must be replaced with your assigned company context.
-- There is no root `AGENTS.md` yet.
-- Shared package metadata exists in `packages/shared/package.json` (`@repo/shared-types`), but no workspace runner is configured at root.
-
----
-
-## Repository structure
+## Estructura del repositorio
 
 ```text
-ai-engineering-company-project-template/
-├── README.md
-├── README.es.md
-├── CONTEXT.md                # Placeholder to be replaced with assigned context
-├── agents/                   # Agent patterns/templates and tools docs
-├── apps/                     # Product apps (web, APIs, dashboards)
-├── data/                     # raw, process, pipelines, eval
-├── docs/                     # Project and architecture documentation
-├── packages/
-│   └── shared/               # Shared package (@repo/shared-types)
-├── scripts/                  # Script conventions/documentation
-├── shared/                   # Shared assets/conventions at repo level
-├── skills/                   # Reusable agent skills
-└── workflows/                # Automation/orchestration documentation
+.
+├── data_project/       # Procesamiento de conocimiento, RAG, pipelines y evaluacion
+├── docs/               # Arquitectura, configuracion y documentacion funcional
+├── packages/shared/    # Tipos compartidos
+├── scripts/            # Scripts de carga y utilidades
+├── services/           # API FastAPI, autenticacion, agente y servicios de dominio
+├── tests/              # Pruebas automatizadas
+├── uis/
+│   ├── backoffice/     # Aplicacion Next.js para operaciones internas
+│   └── website/        # Sitio web estatico
+├── docker-compose.yml  # Orquestacion local de backend, Qdrant e interfaces
+└── server.py           # Aplicacion FastAPI
 ```
 
----
+## Requisitos
 
-## How to start
+- Docker y Docker Compose v2.
+- Un archivo `.env` en la raiz del repositorio. Docker Compose lo carga para el backend y las interfaces; configura como minimo `SECRET_KEY` para autenticacion.
+- Para las funciones RAG y de agente que llaman a servicios externos, configura tambien las variables y credenciales de embeddings y del modelo generativo. Consulta [docs/rag/configuration.md](./docs/rag/configuration.md).
 
-1. **Use this repository as a template** and create your own project repo.
-2. **Clone** your repository (or open it in Codespaces).
-3. **Replace** `CONTEXT.md` with the full context for your assigned company.
-4. **Review** each top-level folder `README.md` to understand intended responsibilities (`apps/`, `data/`, `skills/`, etc.).
-5. **Start implementing** milestone deliverables in `apps/`, reusing `packages/shared/` and `data/` as needed.
+No guardes claves, tokens ni otros secretos en Git. Si no necesitas las funciones de IA externas, puedes dejar sin configurar sus credenciales; esas funciones no estaran disponibles.
 
----
+## Levantar el proyecto con Docker
 
-## Milestones (reference)
+Desde la raiz:
 
-| Milestone | Focus        | Typical deliverables                        |
-| --------- | ------------ | ------------------------------------------- |
-| 0         | Prework      | Environment setup, first prompts            |
-| 1         | Web          | Corporate website, forms, SEO               |
-| 2         | Programming  | Business logic, scoring, calculations       |
-| 3         | AI-driven UI | AI-generated interfaces                     |
-| 4         | Next.js      | Portals, loyalty app, operations UI         |
-| 5         | Backend      | Central API (locations, menus, sales, etc.) |
-| 6         | Telemetry    | Data pipeline, dashboards                   |
-| 7         | RAG & Memory | Semantic knowledge base, search             |
-| 8         | Agents       | Support, onboarding, training agents        |
-| 9         | Workflows    | n8n automations                             |
-| 10        | Real-time    | Live dashboards, alerts, streaming          |
+```bash
+# Crea .env y configura SECRET_KEY antes de iniciar los servicios.
+docker compose up --build
+```
 
----
+Cuando los contenedores esten listos, abre:
 
-## Links
+- Website: <http://localhost:3000>
+- Backoffice: <http://localhost:3001>
+- API y documentacion interactiva: <http://localhost:8000/docs>
+- Qdrant: <http://localhost:6333/dashboard>
 
-- [4Geeks Academy — AI Engineering](https://4geeksacademy.com/es/programas-de-carrera/ingenieria-ia)
-- [How to start a coding project](https://4geeks.com/lesson/how-to-start-a-project)
+Para detener los servicios, pulsa `Ctrl+C` o ejecuta:
 
----
+```bash
+docker compose down
+```
 
-## Contributors
+Compose conserva los datos de Qdrant en un volumen Docker. No uses `docker compose down -v` salvo que quieras borrar tambien los datos persistidos.
 
-This template was built as part of the 4Geeks Academy AI Engineering Career Program by [@marcogonzalo](https://www.linkedin.com/in/marcogonzalo) and [@alezanchezr](https://x.com/alesanchezr) and many other contributors. Find out more about our [AI Engineering Course](https://4geeksacademy.com/en/career-programs/ai-engineering), and [other courses](https://4geeksacademy.com/en/program-comparison).
+### Codespaces
 
-You can find other templates and resources like this at the [4Geeks Academy GitHub page](https://github.com/4geeksacademy).
+Si el backend no puede resolver los proveedores externos desde la red bridge de Docker, puedes iniciar el backend y Qdrant con la configuracion de red de Codespaces:
 
-_This template is maintained by 4Geeks Academy for the AI Engineering track. For exclusive use in the programme._
+```bash
+docker compose -f docker-compose.yml -f docker-compose.codespaces.yml up -d backend qdrant
+```
+
+La variante de Codespaces es opcional. Inicia solo `backend` y `qdrant`; para ejecutar las interfaces en este modo, arranca sus aplicaciones localmente y configura la URL del backend.
+
+## Aplicaciones y capacidades
+
+- **Talent Pipeline Tracker:** listado, busqueda y filtros de candidatos, edicion de etapas y estados, notas y formularios de alta.
+- **Backoffice:** autenticacion y cuenta, proveedores, inventario, incidencias, analisis de incidentes, telemetria y reporting.
+- **Website:** sitio web corporativo independiente del backoffice.
+- **API:** endpoints para los dominios operativos, autenticacion, consultas de conocimiento, agente de soporte y reportes.
+- **Datos e IA:** ingesta y recuperacion semantica de conocimiento, flujos de reporting y evaluaciones offline del agente.
+
+## Desarrollo y validacion
+
+El backoffice puede ejecutarse en modo desarrollo desde su directorio:
+
+```bash
+cd uis/backoffice
+npm install
+API_URL=http://localhost:8000 NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+```
+
+El backend debe estar disponible en `http://localhost:8000`; puedes iniciarlo con Docker o, teniendo Python 3.11 instalado, instalar sus dependencias y ejecutar:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r services/requirements.txt
+export SECRET_KEY='configura-un-secreto-local'
+uvicorn server:app --reload
+```
+
+Comprobaciones focalizadas:
+
+```bash
+python -m pytest
+cd uis/backoffice && npm run lint
+```
+
+## Documentacion adicional
+
+- [Configuracion de RAG](./docs/rag/configuration.md)
+- [Diseno de RAG](./docs/rag/rag-design.md)
+- [Propuesta de arquitectura](./docs/ARCHITECTURE_PROPOSAL.md)
