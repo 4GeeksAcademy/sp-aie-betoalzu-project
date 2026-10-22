@@ -158,3 +158,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Una regresion detecto que AssetResponse asignaba cero cuando faltaba current_stock; la tool ahora rechaza ese contrato incompleto como invalid_response en lugar de confirmar stock no recibido.
 - Validacion combinada de agente, APIs, Prefect y RAG: 75 passed, 3 failed. Los tres fallos son los preexistentes de tests/pipelines/test_rag.py: FakeQdrantClient devuelve una lista mientras retrieve espera .points; no se modificaron el RAG ni sus pruebas.
 - Lint focalizado E9/F/I y diff check correctos. Revision previa al commit: solo evaluaciones, correccion acoplada del contrato de inventario, documentacion y este avance autorizado; sin secretos ni cambios en otras rutas protegidas.
+## Servidor MCP OAuth — paso 1
+
+- Se añadieron los seis tools MCP de incidencias e inventario con esquemas tipados, filtros limitados, backend HTTP allowlisted y scopes `incidents:read`, `incidents:write` e `inventory:read`.
+- El servidor usa `mcpauth` para validar tokens JWT con issuer, audiencia y JWKS; publica Protected Resource Metadata, protege inicialización/listado/ejecución y responde 403 ante scopes insuficientes. Las escrituras de inventario se rechazan sin llamar al backend.
+- Se añadieron `mcpauth`, `mcp` y `langchain-mcp-adapters` a los manifiestos Python. `uv.lock` no se actualizó porque permanece restringido por la política de exclusión.
+- Se documentaron configuración de desarrollo, permisos, endpoints allowlisted, errores, logging y el estado pendiente de Playground en `docs/mcp/README.md`.
+- Validación focalizada: 17 pruebas MCP aprobadas, Ruff y `git diff --check` correctos. No se ejecutó MCP Playground; no se configuraron proveedor OAuth, token de prueba ni URL pública reenviada.
