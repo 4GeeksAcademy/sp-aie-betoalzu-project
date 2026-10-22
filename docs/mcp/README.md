@@ -52,7 +52,7 @@ Cada tool ejecutado y cada denegación se registra con `tool_name`, identidad OA
 
 ## Integración cliente
 
-Un cliente MCP usa la URL Streamable HTTP y configura un access token OAuth válido para `MCP_RESOURCE_URI`, por ejemplo en el header Bearer del transporte. Para la integración del agente, la URL y el token de acceso se configuran por separado mediante `SUPPORT_AGENT_MCP_URL` y `SUPPORT_AGENT_MCP_ACCESS_TOKEN`; no se debe reenviar el token del cliente del backend REST.
+Un cliente MCP usa la URL Streamable HTTP y configura un access token OAuth vigente para `MCP_RESOURCE_URI`, por ejemplo en el header Bearer del transporte. Para la integración del agente, la URL y el token obtenido/provisionado por el cliente OAuth se configuran mediante `SUPPORT_AGENT_MCP_URL` y `SUPPORT_AGENT_MCP_ACCESS_TOKEN`; el token debe incluir los scopes requeridos por las consultas planeadas. No se reenvía el token del cliente del backend REST. Si MCP no está disponible o la autenticación falla, el agente informa el fallo de esa fuente y no consulta directamente el backend como fallback.
 
 ## Validación manual
 

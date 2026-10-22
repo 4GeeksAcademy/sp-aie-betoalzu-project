@@ -5,7 +5,7 @@ import logging
 import os
 import sqlite3
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict
 from uuid import uuid4
@@ -16,14 +16,13 @@ from langgraph.graph import END, START, StateGraph
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from data_project.pipelines.rag import generate_answer, retrieve
+from services.agent.mcp_tools import query_incidents, query_inventory
 from services.agent.routing import QueryPlan, Source, plan_question
 from services.agent.tools import (
     IncidentQuery,
     IncidentResult,
     InventoryQuery,
     InventoryResult,
-    query_incidents,
-    query_inventory,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,7 +99,7 @@ class TraceStore:
                     sequence,
                     node_name,
                     status,
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(UTC).isoformat(),
                     json.dumps(output, ensure_ascii=False),
                 ),
             )

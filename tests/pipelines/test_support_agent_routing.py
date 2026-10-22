@@ -3,11 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from unittest.mock import Mock
-from uuid import uuid4
 
 import pytest
-import requests
 
+from services.agent.mcp_tools import query_incidents
 from services.agent.routing import plan_question
 from services.agent.support import SupportAgent, TraceStore
 from services.agent.tools import (
@@ -15,7 +14,6 @@ from services.agent.tools import (
     IncidentResult,
     InventoryQuery,
     InventoryResult,
-    query_incidents,
 )
 from services.api.incidents.models import IncidentOut
 from services.api.inventory.models import AssetResponse
@@ -35,7 +33,13 @@ def forbid_network(monkeypatch):
         pytest.fail("Offline evaluation attempted an external HTTP call")
 
     monkeypatch.setattr("requests.sessions.Session.request", forbidden)
-    for key in ("SUPPORT_AGENT_SERVICE_TOKEN", "LLM_API_KEY", "EMBED_MODEL_API_KEY"):
+    for key in (
+        "SUPPORT_AGENT_MCP_ACCESS_TOKEN",
+        "SUPPORT_AGENT_MCP_URL",
+        "SUPPORT_AGENT_SERVICE_TOKEN",
+        "LLM_API_KEY",
+        "EMBED_MODEL_API_KEY",
+    ):
         monkeypatch.delenv(key, raising=False)
 
 
@@ -176,9 +180,21 @@ def test_sku_question_targets_inventory_without_rag():
 
 
 def test_real_incident_tool_timeout_does_not_block_graph(tmp_path, monkeypatch):
-    monkeypatch.setenv("SUPPORT_AGENT_SERVICE_TOKEN", str(uuid4()))
-    get = Mock(side_effect=requests.Timeout())
-    monkeypatch.setattr("services.agent.tools.requests.get", get)
+    monkeypatch.setenv("SUPPORT_AGENT_MCP_URL", "http://mcp.example.test/mcp")
+    monkeypatch.setenv("SUPPORT_AGENT_MCP_ACCESS_TOKEN", "dummy-access-token")
+
+    class TimeoutClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def get_tools(self, *, server_name):
+            assert server_name == "nexova"
+            raise TimeoutError()
+
+    monkeypatch.setattr(
+        "services.agent.mcp_tools.MultiServerMCPClient",
+        TimeoutClient,
+    )
     agent = SupportAgent(
         tmp_path / "agent.sqlite3", incidents_fn=query_incidents,
         retrieve_fn=Mock(side_effect=AssertionError("RAG must not be called")),
@@ -188,7 +204,6 @@ def test_real_incident_tool_timeout_does_not_block_graph(tmp_path, monkeypatch):
         assert result["error"] is None
         assert "No pude confirmar" in result["answer"]
         assert "estado=" not in result["answer"]
-        assert get.call_args.kwargs["timeout"] == 4.0
         events = agent.get_trace(result["run_id"])
         completed = [event for event in events if event["status"] == "completed"]
         assert completed[1]["output"]["source"] == "incidents"

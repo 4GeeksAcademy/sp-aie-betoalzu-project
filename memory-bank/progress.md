@@ -165,3 +165,8 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadieron `mcpauth`, `mcp` y `langchain-mcp-adapters` a los manifiestos Python. `uv.lock` no se actualizó porque permanece restringido por la política de exclusión.
 - Se documentaron configuración de desarrollo, permisos, endpoints allowlisted, errores, logging y el estado pendiente de Playground en `docs/mcp/README.md`.
 - Validación focalizada: 17 pruebas MCP aprobadas, Ruff y `git diff --check` correctos. No se ejecutó MCP Playground; no se configuraron proveedor OAuth, token de prueba ni URL pública reenviada.
+## Migración del agente LangGraph a MCP — paso 2
+
+- El grafo ahora consulta `incidents_get` e `inventory_get_products` a través de `langchain-mcp-adapters` sobre Streamable HTTP con `SUPPORT_AGENT_MCP_URL` y un bearer OAuth vigente en `SUPPORT_AGENT_MCP_ACCESS_TOKEN`.
+- Se retiraron las llamadas HTTP directas de `services/agent/tools.py`; fallos de conexión, autenticación, autorización y contratos MCP se devuelven como fuente fallida, sin fallback directo. Se conserva el formato de resultados, las trazas y la composición con RAG.
+- Validación focalizada: 37 pruebas de herramientas MCP, routing y grafo aprobadas; Ruff y compilación correctos. `tests/api/test_support_agent_router.py` no se pudo recolectar porque el entorno no tiene `bcrypt`; no se modificó esa ruta.
