@@ -71,6 +71,10 @@ El backend declara `langgraph` y `langgraph-checkpoint-sqlite` en `pyproject.tom
 
 `SUPPORT_AGENT_DB_PATH` configura el archivo de checkpoints y trazas. Por defecto es `data_project/support-agent.sqlite3`; Compose lo fija en `/app/data_project/support-agent.sqlite3` y monta `./data_project/` de forma persistente en esa ruta. Mantener el archivo en almacenamiento durable y con acceso restringido: los checkpoints conservan la pregunta, el contexto recuperado y la respuesta, mientras que las trazas exponen referencias de fuente y sección.
 
+La memoria operativa aprobada usa una base SQLite independiente, nunca el checkpoint ni Qdrant. `SUPPORT_AGENT_MEMORY_DB_PATH` la configura; por defecto es `data_project/support-agent-memory.sqlite3` y Compose la mantiene en el mismo volumen durable. El agente solo habilita recuerdos de soporte: procedimientos de escalación, preferencias de empresas cliente e incidentes repetibles. Las propuestas se resuelven dentro de la conversación usando el `conversation_id` UUID devuelto por `POST /agent/query`; se puede enviar además un `customer_id` opaco para limitar propuestas y recuperación a esa empresa. Los recuerdos generales y los de ese cliente pueden recuperarse, nunca los de otra empresa.
+
+Todos los usuarios autenticados pueden consultar recuerdos del alcance solicitado; únicamente los roles `admin` y `manager` pueden proponer, aprobar, rechazar o editar. Las propuestas caducan a los 7 días, los recuerdos tras 180 días sin uso y la auditoría se retiene durante 365 días. La consolidación se ejecuta al iniciar el servicio y luego diariamente; los mensajes originales no se guardan en la auditoría, solo una referencia SHA-256. Los recuerdos sin referencia documental verificable se marcan como pendientes de verificación y no prevalecen sobre fuentes operativas vigentes.
+
 `POST /agent/query` y `GET /agent/traces/{run_id}` requieren autenticación. La respuesta de consulta contiene `answer` y `run_id`; la traza se consulta por separado y no devuelve el estado completo del checkpoint. `POST /knowledge/query` sigue disponible con su contrato existente.
 
 ### Tools de consulta operativa
