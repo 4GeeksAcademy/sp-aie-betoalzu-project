@@ -7,6 +7,7 @@ except ImportError:
     print("You don't have FastAPI installed, run `$ pip3 install fastapi uvicorn` and try again")
     exit(1)
 
+import asyncio
 import os
 import subprocess
 from contextlib import asynccontextmanager
@@ -26,7 +27,11 @@ from services.api.telemetry.routes import telemetry_api
 from services.api.knowledge.routes import knowledge_api
 from services.reporting.routes import reporting_api
 from services.agent.routes import agent_api
-from services.agent.support import initialize_support_agent, shutdown_support_agent
+from services.agent.support import (
+    initialize_support_agent,
+    shutdown_support_agent,
+    support_memory_consolidation_loop,
+)
 from services.database import init_db
 
 
@@ -35,9 +40,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: runs startup tasks before yielding, shutdown after."""
     init_db()  # Create SQLModel tables on Supabase/PostgreSQL
     initialize_support_agent()
+    memory_maintenance = asyncio.create_task(support_memory_consolidation_loop())
     try:
         yield
     finally:
+        memory_maintenance.cancel()
+        try:
+            await memory_maintenance
+        except asyncio.CancelledError:
+            pass
         shutdown_support_agent()
 
 

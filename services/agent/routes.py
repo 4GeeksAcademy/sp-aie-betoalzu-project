@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,11 +23,22 @@ class AgentQueryRequest(BaseModel):
         max_length=2000,
         description="Pregunta sobre servicios, precios o procesos de Nexova.",
     )
+    conversation_id: UUID | None = Field(
+        default=None,
+        description="Identificador opaco y estable para resolver propuestas pendientes.",
+    )
+    customer_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$",
+    )
 
 
 class AgentQueryResponse(BaseModel):
     answer: str
     run_id: str
+    conversation_id: str
 
 
 class AgentTraceEvent(BaseModel):
@@ -47,11 +58,19 @@ class AgentTraceResponse(BaseModel):
 @agent_api.post("/query", response_model=AgentQueryResponse)
 def query_agent(
     body: AgentQueryRequest,
-    _: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> AgentQueryResponse:
     run_id = str(uuid4())
+    conversation_id = str(body.conversation_id or uuid4())
     try:
-        result = get_support_agent().invoke(body.question, run_id=run_id)
+        result = get_support_agent().invoke(
+            body.question,
+            run_id=run_id,
+            conversation_id=conversation_id,
+            customer_id=body.customer_id,
+            actor_id=str(current_user.id),
+            actor_role=current_user.role.value,
+        )
     except Exception as exc:
         logger.error(
             "Support-agent execution failed (run_id=%s, error_type=%s)",
@@ -75,7 +94,11 @@ def query_agent(
             },
         )
 
-    return AgentQueryResponse(answer=result["answer"], run_id=run_id)
+    return AgentQueryResponse(
+        answer=result["answer"],
+        run_id=run_id,
+        conversation_id=conversation_id,
+    )
 
 
 @agent_api.get("/traces/{run_id}", response_model=AgentTraceResponse)
