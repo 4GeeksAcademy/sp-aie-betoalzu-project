@@ -170,3 +170,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - El grafo ahora consulta `incidents_get` e `inventory_get_products` a través de `langchain-mcp-adapters` sobre Streamable HTTP con `SUPPORT_AGENT_MCP_URL` y un bearer OAuth vigente en `SUPPORT_AGENT_MCP_ACCESS_TOKEN`.
 - Se retiraron las llamadas HTTP directas de `services/agent/tools.py`; fallos de conexión, autenticación, autorización y contratos MCP se devuelven como fuente fallida, sin fallback directo. Se conserva el formato de resultados, las trazas y la composición con RAG.
 - Validación focalizada: 37 pruebas de herramientas MCP, routing y grafo aprobadas; Ruff y compilación correctos. `tests/api/test_support_agent_router.py` no se pudo recolectar porque el entorno no tiene `bcrypt`; no se modificó esa ruta.
+
+## Memoria operativa del agente de soporte
+
+- Se implementó almacenamiento SQLite separado para recuerdos, propuestas y auditoría; recuperación limitada al área de soporte y cliente, confirmación explícita para escribir, permisos `admin`/`manager`, deduplicación y expiración/consolidación.
+- El grafo incorpora recuerdos pertinentes y salida estructurada con propuesta nullable; clasifica primero respuestas a propuestas pendientes. La API devuelve y acepta `conversation_id`; Compose configura el archivo durable independiente.
+- Se documentaron los ciclos aprobados/rechazados y las reglas de datos no memorables. Validación: 17 pruebas focalizadas de grafo/memoria aprobadas, Ruff de los archivos nuevos, compilación y `git diff --check` correctos. Las pruebas de API no se recolectaron porque el entorno carece de `prefect`.
