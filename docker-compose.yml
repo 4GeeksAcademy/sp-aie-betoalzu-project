@@ -27,6 +27,7 @@ services:
     environment:
       QDRANT_URL: http://qdrant:6333
       SUPPORT_AGENT_DB_PATH: /app/data_project/support-agent.sqlite3
+      SUPPORT_AGENT_MEMORY_DB_PATH: /app/data_project/support-agent-memory.sqlite3
     depends_on:
       - qdrant
     networks:

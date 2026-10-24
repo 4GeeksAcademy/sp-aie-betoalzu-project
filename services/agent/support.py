@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -15,8 +16,19 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
-from data_project.pipelines.rag import generate_answer, retrieve
+from data_project.pipelines.rag import (
+    classify_memory_intent,
+    generate_answer,
+    generate_support_reply,
+    retrieve,
+)
 from services.agent.mcp_tools import query_incidents, query_inventory
+from services.agent.memory import (
+    APPROVER_ROLES,
+    MemoryStore,
+    PendingProposalExists,
+    validate_candidate,
+)
 from services.agent.routing import QueryPlan, Source, plan_question
 from services.agent.tools import (
     IncidentQuery,
@@ -39,6 +51,12 @@ class AgentState(TypedDict):
     incident_result: dict[str, Any]
     inventory_result: dict[str, Any]
     rag_status: str
+    memory_context: list[dict[str, Any]]
+    conversation_id: str
+    customer_id: str | None
+    actor_id: str
+    actor_role: str
+    response_composed: bool
 
 
 class TraceEvent(TypedDict):
@@ -191,7 +209,16 @@ def route_after_inventory(state: AgentState) -> str:
 
 def route_after_answer(state: AgentState) -> str:
     sources = state.get("plan", {}).get("sources", ["rag"])
-    return "compose_response" if any(source != "rag" for source in sources) else "end"
+    has_operations = any(source != "rag" for source in sources)
+    return (
+        "compose_response"
+        if has_operations and not state.get("response_composed")
+        else "end"
+    )
+
+
+def route_after_compose(state: AgentState, *, complete_memory: bool) -> str:
+    return "generate_response" if complete_memory and not state.get("context") else "end"
 
 
 def route_after_retrieve(state: AgentState) -> str:
@@ -202,18 +229,108 @@ def build_support_graph(
     traces: TraceStore,
     *,
     retrieve_fn: Callable[[str], list[dict[str, Any]]] = retrieve,
-    generate_fn: Callable[[str, list[dict[str, Any]]], str] = generate_answer,
+    generate_fn: Callable[[str, list[dict[str, Any]]], str] | None = None,
+    structured_generate_fn: Callable[..., dict[str, Any]] | None = None,
     incidents_fn: Callable[[IncidentQuery], IncidentResult] = query_incidents,
     inventory_fn: Callable[[InventoryQuery], InventoryResult] = query_inventory,
+    memory_store: MemoryStore,
     checkpointer: SqliteSaver,
 ):
+    structured_reply = structured_generate_fn
+    if structured_reply is None and generate_fn is None:
+        structured_reply = generate_support_reply
+
+    def complete_reply(
+        state: AgentState,
+        *,
+        fixed_answer: str | None = None,
+        generation_question: str | None = None,
+    ) -> tuple[str, bool]:
+        question = generation_question or state["question"].strip()
+        has_context = bool(state.get("context"))
+        proposal_data: dict[str, Any] | None = None
+        if structured_reply is not None:
+            reply = structured_reply(
+                question,
+                state.get("context", []),
+                state.get("memory_context", []),
+                fixed_answer=fixed_answer,
+                customer_id=state.get("customer_id"),
+            )
+            answer = reply["answer"].strip()
+            proposal_data = reply.get("propuesta_memoria")
+        elif has_context:
+            fallback_generate = generate_fn or generate_answer
+            answer = fallback_generate(question, state["context"]).strip()
+        else:
+            answer = fixed_answer or ""
+        if not answer:
+            raise RuntimeError("Support-agent generation returned an empty answer.")
+
+        saved_proposal = False
+        if proposal_data and state.get("actor_role") in APPROVER_ROLES:
+            allowed_references = {
+                f"{chunk.get('source_document', '?')} / {chunk.get('section', '?')}"
+                for chunk in state.get("context", [])
+            }
+            candidate = validate_candidate(
+                proposal_data,
+                origin_message=state["question"],
+                customer_id=state.get("customer_id"),
+                allowed_references=allowed_references,
+            )
+            if candidate is not None:
+                try:
+                    proposal_id = memory_store.propose(
+                        candidate,
+                        origin_message=state["question"],
+                        conversation_id=state["conversation_id"],
+                        actor_id=state["actor_id"],
+                        actor_role=state["actor_role"],
+                    )
+                except PendingProposalExists:
+                    logger.warning(
+                        "Support-agent memory proposal skipped (run_id=%s, reason=pending_exists)",
+                        state["run_id"],
+                    )
+                else:
+                    saved_proposal = True
+                    proposal_data = {
+                        "proposal_id": proposal_id,
+                        "candidate": candidate.model_dump(exclude={"reason"}),
+                    }
+                    answer += (
+                        "\n\nPropuesta de memoria: "
+                        f"{candidate.subject}: {candidate.fact} "
+                        "¿Quieres que lo recuerde? Responde sí, no o indícame "
+                        "qué debería corregir."
+                    )
+        return answer, saved_proposal
+
     def receive_question(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
         valid = bool(state["question"].strip())
         error = None if valid else "question_required"
         if not valid:
             return {"error": error}, {"valid": False, "error": error}
         plan = plan_question(state["question"])
-        return {"error": None, "plan": plan}, {"valid": True, "sources": plan["sources"]}
+        memories = memory_store.retrieve(
+            state["question"],
+            business_area="support",
+            customer_id=state.get("customer_id"),
+        )
+        return {
+            "error": None,
+            "plan": plan,
+            "memory_context": memories,
+        }, {
+            "valid": True,
+            "sources": plan["sources"],
+            "memory_count": len(memories),
+            "memory_references": [
+                {"memory_id": item["memory_id"], "category": item["category"]}
+                for item in memories
+            ],
+        }
 
     def consult_incidents(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
         result = incidents_fn(IncidentQuery.model_validate(state["plan"]["incident_query"]))
@@ -254,15 +371,22 @@ def build_support_graph(
     def generate_response(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
         question = state["question"].strip()
         mixed = route_after_answer(state) != "end"
-        if mixed:
+        if mixed and state.get("context"):
             question = (
                 "Explica solo el conocimiento documental aplicable, sin afirmar "
                 "estados actuales de tickets ni stock de productos. Consulta: " + question
             )
         try:
-            answer = generate_fn(question, state["context"]).strip()
-            if not answer:
-                raise RuntimeError("RAG generation returned an empty answer.")
+            fixed_answer = (
+                state["answer"]
+                if state.get("response_composed")
+                else None
+            )
+            answer, proposal_saved = complete_reply(
+                state,
+                fixed_answer=fixed_answer,
+                generation_question=question,
+            )
         except RAG_FAILURES:
             if not mixed:
                 raise
@@ -271,9 +395,13 @@ def build_support_graph(
                 "answer": "No pude consultar la información documental ahora mismo.",
                 "rag_status": "failed",
             }, {"outcome": "failed", "error": "source_failed"}
-        return {"answer": answer}, {"outcome": "success", **(
-            {"answer_length": len(answer)} if mixed else {"answer": answer}
-        )}
+        return {
+            "answer": answer,
+        }, {
+            "outcome": "success",
+            "answer_length": len(answer),
+            "memory_proposal_offered": proposal_saved,
+        }
 
     def answer_without_context(
         state: AgentState,
@@ -283,9 +411,16 @@ def build_support_graph(
             "Lo siento, la base de conocimiento no contiene información "
             "suficiente para responder esa pregunta."
         )
-        return {"answer": answer}, {
+        saved_proposal = False
+        if not any(source != "rag" for source in state["plan"]["sources"]):
+            answer, saved_proposal = complete_reply(state, fixed_answer=answer)
+        return {
+            "answer": answer,
+        }, {
             "outcome": "failed" if failed else "not_found",
-            "reason": "source_failed" if failed else "no_context", "answer": answer,
+            "reason": "source_failed" if failed else "no_context",
+            "answer_length": len(answer),
+            "memory_proposal_offered": saved_proposal,
         }
 
     def compose_response(state: AgentState) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -319,7 +454,10 @@ def build_support_graph(
         if "rag" in sources:
             parts.append("Información documental (fuente: rag):\n" + state["answer"])
         answer = "\n\n".join(parts)
-        return {"answer": answer}, {"sources": sources, "answer_length": len(answer)}
+        return {
+            "answer": answer,
+            "response_composed": True,
+        }, {"sources": sources, "answer_length": len(answer)}
 
     builder = StateGraph(AgentState)
     builder.add_node(
@@ -374,7 +512,14 @@ def build_support_graph(
         builder.add_conditional_edges(node, route_after_answer, {
             "compose_response": "compose_response", "end": END,
         })
-    builder.add_edge("compose_response", END)
+    builder.add_conditional_edges(
+        "compose_response",
+        lambda state: route_after_compose(
+            state,
+            complete_memory=structured_reply is not None,
+        ),
+        {"generate_response": "generate_response", "end": END},
+    )
 
     graph = builder.compile(checkpointer=checkpointer)
     expected_nodes = {
@@ -398,6 +543,8 @@ def build_support_graph(
         ("retrieve_context", "answer_without_context"),
         ("generate_response", "__end__"),
         ("answer_without_context", "__end__"),
+        ("compose_response", "generate_response"),
+        ("compose_response", "__end__"),
         ("receive_question", "consult_incidents"),
         ("receive_question", "consult_inventory"),
         ("consult_incidents", "consult_inventory"),
@@ -427,12 +574,26 @@ class SupportAgent:
         database_path: str | Path,
         *,
         retrieve_fn: Callable[[str], list[dict[str, Any]]] = retrieve,
-        generate_fn: Callable[[str, list[dict[str, Any]]], str] = generate_answer,
+        generate_fn: Callable[[str, list[dict[str, Any]]], str] | None = None,
+        structured_generate_fn: Callable[..., dict[str, Any]] | None = None,
         incidents_fn: Callable[[IncidentQuery], IncidentResult] = query_incidents,
         inventory_fn: Callable[[InventoryQuery], InventoryResult] = query_inventory,
+        memory_database_path: str | Path | None = None,
+        intent_classifier: Callable[
+            [str, dict[str, Any]], dict[str, Any]
+        ] = classify_memory_intent,
     ) -> None:
         self.database_path = Path(database_path).expanduser().resolve()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.memory_database_path = Path(
+            memory_database_path
+            if memory_database_path is not None
+            else self.database_path.with_name("support-agent-memory.sqlite3")
+        ).expanduser().resolve()
+        if self.memory_database_path == self.database_path:
+            raise ValueError("Memory storage must use a separate SQLite database.")
+        self.memory_store = MemoryStore(self.memory_database_path)
+        self._intent_classifier = intent_classifier
         self._checkpoint_connection = sqlite3.connect(
             self.database_path,
             check_same_thread=False,
@@ -445,26 +606,214 @@ class SupportAgent:
             self.traces,
             retrieve_fn=retrieve_fn,
             generate_fn=generate_fn,
+            structured_generate_fn=structured_generate_fn,
             incidents_fn=incidents_fn,
             inventory_fn=inventory_fn,
+            memory_store=self.memory_store,
             checkpointer=self.checkpointer,
         )
 
-    def invoke(self, question: str, *, run_id: str | None = None) -> AgentState:
+    def invoke(
+        self,
+        question: str,
+        *,
+        run_id: str | None = None,
+        conversation_id: str | None = None,
+        customer_id: str | None = None,
+        actor_id: str = "",
+        actor_role: str = "",
+    ) -> AgentState:
         execution_id = run_id or str(uuid4())
+        conversation = conversation_id or execution_id
+        current_question = question
+        if actor_role in APPROVER_ROLES:
+            pending = self.memory_store.get_pending(
+                conversation_id=conversation,
+                actor_id=actor_id,
+                actor_role=actor_role,
+            )
+            if pending is not None:
+                self.traces.record(
+                    execution_id,
+                    "resolve_memory_proposal",
+                    "started",
+                    {"proposal_id": pending["proposal_id"]},
+                )
+                try:
+                    resolution = self._intent_classifier(question, pending["candidate"])
+                    intent = resolution.get("intent")
+                    if intent not in {
+                        "approve", "reject", "edit", "ambiguous", "new_topic",
+                    }:
+                        raise RuntimeError("Memory-intent classifier returned an invalid intent.")
+                    continuation = resolution.get("continuation_question")
+                    if intent == "approve":
+                        memory_id = self.memory_store.resolve(
+                            pending["proposal_id"],
+                            decision="approve",
+                            conversation_id=conversation,
+                            actor_id=actor_id,
+                            actor_role=actor_role,
+                            origin_message=question,
+                        )
+                        immediate = (
+                            "Recuerdo aprobado y guardado."
+                            if memory_id
+                            else "La propuesta ya no está disponible."
+                        )
+                    elif intent == "reject":
+                        self.memory_store.resolve(
+                            pending["proposal_id"],
+                            decision="reject",
+                            conversation_id=conversation,
+                            actor_id=actor_id,
+                            actor_role=actor_role,
+                            origin_message=question,
+                        )
+                        immediate = "De acuerdo, no guardaré ese recuerdo."
+                    elif intent == "edit":
+                        edited = validate_candidate(
+                            resolution.get("edited_candidate") or {},
+                            origin_message=question,
+                            customer_id=customer_id,
+                            allowed_references=set(),
+                        )
+                        if edited is None:
+                            self.memory_store.resolve(
+                                pending["proposal_id"],
+                                decision="discard",
+                                conversation_id=conversation,
+                                actor_id=actor_id,
+                                actor_role=actor_role,
+                                origin_message=question,
+                            )
+                            immediate = (
+                                "No pude convertir esa corrección en una propuesta "
+                                "segura; no guardaré el recuerdo anterior."
+                            )
+                        else:
+                            replacement_id = self.memory_store.resolve(
+                                pending["proposal_id"],
+                                decision="edit",
+                                conversation_id=conversation,
+                                actor_id=actor_id,
+                                actor_role=actor_role,
+                                origin_message=question,
+                                edited_candidate=edited,
+                            )
+                            immediate = (
+                                "Propuesta actualizada: "
+                                f"{edited.subject}: {edited.fact} "
+                                "¿Quieres que lo recuerde?"
+                                if replacement_id
+                                else "La propuesta ya no está disponible."
+                            )
+                    else:
+                        self.memory_store.resolve(
+                            pending["proposal_id"],
+                            decision="discard",
+                            conversation_id=conversation,
+                            actor_id=actor_id,
+                            actor_role=actor_role,
+                            origin_message=question,
+                        )
+                        immediate = ""
+                    self.traces.record(
+                        execution_id,
+                        "resolve_memory_proposal",
+                        "completed",
+                        {"proposal_id": pending["proposal_id"], "decision": intent},
+                    )
+                except Exception:
+                    self.traces.record(
+                        execution_id,
+                        "resolve_memory_proposal",
+                        "failed",
+                        {
+                            "proposal_id": pending["proposal_id"],
+                            "error": "resolution_failed",
+                        },
+                    )
+                    raise
+
+                if intent == "edit":
+                    if immediate.startswith("Propuesta actualizada"):
+                        current_question = continuation or ""
+                    elif continuation:
+                        current_question = continuation
+                    else:
+                        return self._immediate_result(
+                            immediate,
+                            execution_id,
+                            conversation,
+                            customer_id,
+                            actor_id,
+                            actor_role,
+                        )
+                elif intent in {"approve", "reject"} and continuation:
+                    current_question = continuation
+                elif intent in {"ambiguous", "new_topic"}:
+                    current_question = question
+                else:
+                    return self._immediate_result(
+                        immediate,
+                        execution_id,
+                        conversation,
+                        customer_id,
+                        actor_id,
+                        actor_role,
+                    )
+
         return self.graph.invoke(
             {
-                "question": question,
+                "question": current_question,
                 "context": [],
                 "answer": "",
                 "error": None,
                 "run_id": execution_id,
+                "memory_context": [],
+                "conversation_id": conversation,
+                "customer_id": customer_id,
+                "actor_id": actor_id,
+                "actor_role": actor_role,
+                "response_composed": False,
             },
             {
                 "configurable": {"thread_id": f"support-agent:{execution_id}"},
                 "metadata": {"run_id": execution_id},
             },
         )
+
+    @staticmethod
+    def _immediate_result(
+        answer: str,
+        run_id: str,
+        conversation_id: str,
+        customer_id: str | None,
+        actor_id: str,
+        actor_role: str,
+    ) -> AgentState:
+        return {
+            "question": "",
+            "context": [],
+            "answer": answer,
+            "error": None,
+            "run_id": run_id,
+            "plan": {
+                "sources": [],
+                "incident_query": {},
+                "inventory_query": {},
+            },
+            "incident_result": {},
+            "inventory_result": {},
+            "rag_status": "not_used",
+            "memory_context": [],
+            "conversation_id": conversation_id,
+            "customer_id": customer_id,
+            "actor_id": actor_id,
+            "actor_role": actor_role,
+            "response_composed": False,
+        }
 
     def get_state(self, run_id: str):
         return self.graph.get_state(
@@ -490,8 +839,17 @@ def initialize_support_agent() -> None:
         "SUPPORT_AGENT_DB_PATH",
         str(root / "data_project" / "support-agent.sqlite3"),
     )
+    memory_database_path = os.getenv(
+        "SUPPORT_AGENT_MEMORY_DB_PATH",
+        str(root / "data_project" / "support-agent-memory.sqlite3"),
+    )
     try:
-        _agent = SupportAgent(database_path)
+        agent = SupportAgent(
+            database_path,
+            memory_database_path=memory_database_path,
+        )
+        agent.memory_store.consolidate()
+        _agent = agent
     except Exception as exc:
         raise RuntimeError(
             "Unable to initialize the support-agent graph or SQLite store. "
@@ -510,3 +868,16 @@ def get_support_agent() -> SupportAgent:
     if _agent is None:
         raise RuntimeError("Support agent is not initialized.")
     return _agent
+
+
+async def support_memory_consolidation_loop() -> None:
+    while True:
+        await asyncio.sleep(24 * 60 * 60)
+        try:
+            agent = get_support_agent()
+            await asyncio.to_thread(agent.memory_store.consolidate)
+        except sqlite3.Error as exc:
+            logger.error(
+                "Support-memory consolidation failed (error_type=%s)",
+                type(exc).__name__,
+            )
