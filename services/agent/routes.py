@@ -12,6 +12,7 @@ from services.api.users.auth import get_current_user
 from services.api.users.models import UserInDB
 
 logger = logging.getLogger(__name__)
+AUTHENTICATED_USER = Depends(get_current_user)
 
 agent_api = APIRouter(prefix="/agent", tags=["support-agent"])
 
@@ -53,6 +54,12 @@ class AgentTraceEvent(BaseModel):
 class AgentTraceResponse(BaseModel):
     run_id: str
     events: list[AgentTraceEvent]
+
+
+class GuardrailSummaryResponse(BaseModel):
+    total: int
+    by_type: dict[str, int]
+    by_guardrail: dict[str, dict[str, int]]
 
 
 @agent_api.post("/query", response_model=AgentQueryResponse)
@@ -110,3 +117,10 @@ def read_agent_trace(
     if not events:
         raise HTTPException(status_code=404, detail="Trace not found.")
     return AgentTraceResponse(run_id=run_id, events=events)
+
+
+@agent_api.get("/guardrails/summary", response_model=GuardrailSummaryResponse)
+def read_guardrail_summary(
+    _: UserInDB = AUTHENTICATED_USER,
+) -> GuardrailSummaryResponse:
+    return GuardrailSummaryResponse(**get_support_agent().get_guardrail_summary())

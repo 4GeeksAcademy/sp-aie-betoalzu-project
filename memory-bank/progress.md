@@ -178,3 +178,21 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se documentaron los ciclos aprobados/rechazados y las reglas de datos no memorables. Validación: 17 pruebas focalizadas de grafo/memoria aprobadas, Ruff de los archivos nuevos, compilación y `git diff --check` correctos. Las pruebas de API no se recolectaron porque el entorno carece de `prefect`.
 - La API autenticada conserva `conversation_id` entre turnos y admite el alcance opcional por identificador de cliente; el lifecycle ejecuta consolidación al inicio y diariamente, con ruta de SQLite propia en Compose. Las pruebas de API siguen sin recolectarse por la dependencia `prefect` ausente; Ruff detectó además un `RUF059` preexistente en `server.py`, fuera de este cambio.
 - La documentación describe configuración, permisos, caducidad, consolidación y ciclos reproducibles de aprobación/rechazo, además de los ejemplos que no deben memorizarse.
+
+## Guardrails del agente de soporte — paso 1
+
+- Se añadió un guard de entrada determinista antes de resolver memoria, consultar fuentes o generar respuestas. Rechaza intentos de cambio de instrucciones y uso personal, permite saludos/hora en Tokio con redirección y redirige consultas fuera de dominio.
+- Los bloqueos/redirecciones quedan en la traza con identificador, categoría y acción, sin guardar el texto del usuario. Se añadieron pruebas offline para cuatro ataques, tareas personales y small talk.
+- Validación: `tests/pipelines/test_support_agent_guardrails.py` (9 passed), `tests/pipelines/test_support_agent_graph.py` (8 passed) y Ruff focalizado aprobado.
+
+## Guardrails del agente de soporte — paso 2
+
+- Se reforzó el system prompt del agente interno: define dominio Nexova, small talk, rechazo personal, jerarquía de instrucciones y tratamiento de usuario/RAG/tools/memoria como datos no confiables serializados en el mensaje user.
+- Se valida el esquema exacto de `answer`/`propuesta_memoria`, el contenido sensible y secretos antes de guardar propuestas y antes de devolver la respuesta. Las salidas rechazadas usan fallback y no escriben memoria.
+- Validación offline: guardrails, memoria y grafo, `29 passed`. Ruff focalizado pasa; `rag.py` conserva un `F841` preexistente en `retrieve` (ignorado solo para el chequeo de ese archivo). El test de timeout operativo quedó determinista en el paso 3 con un generador estructurado simulado.
+
+## Guardrails del agente de soporte — paso 3
+
+- Se agregó `GET /agent/guardrails/summary`, autenticado con la dependencia existente, con agregados por categoría, guardrail y acción obtenidos de trazas SQLite. No expone texto de usuario, salida, documentos ni secretos.
+- Las entradas vacías registran la activación estructural en el evento de validación existente. Tests verifican resumen de entrada/salida y acceso anónimo/autenticado al endpoint mediante una app FastAPI mínima.
+- Validación offline del agente: `52 passed`. Ruff pasa en los archivos modificados, ignorando solo reglas preexistentes (`B008` en rutas y `F841` en `rag.py`). La suite API completa no se pudo recolectar porque este entorno no tiene Prefect.

@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sqlite3
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,10 +18,18 @@ from langgraph.graph import END, START, StateGraph
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from data_project.pipelines.rag import (
+    InvalidStructuredSupportReply,
     classify_memory_intent,
     generate_answer,
     generate_support_reply,
     retrieve,
+)
+from services.agent.guardrails import (
+    SAFE_OUTPUT_FALLBACK,
+    OutputDecision,
+    inspect_user_input,
+    validate_answer_text,
+    validate_support_reply,
 )
 from services.agent.mcp_tools import query_incidents, query_inventory
 from services.agent.memory import (
@@ -145,6 +154,50 @@ class TraceStore:
             for sequence, node_name, status, timestamp, output_json in rows
         ]
 
+    def guardrail_summary(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT output_json
+                FROM support_agent_traces
+                WHERE status = 'completed'
+                    AND node_name IN (
+                        'input_guardrail', 'output_guardrail', 'receive_question'
+                    )
+                """
+            ).fetchall()
+
+        by_type: Counter[str] = Counter()
+        by_guardrail: dict[str, Counter[str]] = {}
+        for (output_json,) in rows:
+            output = json.loads(output_json)
+            guardrail_id = output.get("guardrail_id")
+            category = output.get("category")
+            action = output.get("action")
+            if (
+                not isinstance(guardrail_id, str)
+                or category not in {"structural", "content", "security"}
+                or action not in {"blocked", "redirected"}
+            ):
+                continue
+            by_type[category] += 1
+            by_guardrail.setdefault(guardrail_id, Counter())[action] += 1
+
+        return {
+            "total": sum(by_type.values()),
+            "by_type": {
+                category: by_type[category]
+                for category in ("structural", "content", "security")
+            },
+            "by_guardrail": {
+                guardrail_id: {
+                    action: counts[action]
+                    for action in ("blocked", "redirected")
+                }
+                for guardrail_id, counts in sorted(by_guardrail.items())
+            },
+        }
+
 
 NodeOperation = Callable[[AgentState], tuple[dict[str, Any], dict[str, Any]]]
 
@@ -240,6 +293,21 @@ def build_support_graph(
     if structured_reply is None and generate_fn is None:
         structured_reply = generate_support_reply
 
+    def record_output_rejection(
+        state: AgentState,
+        decision: OutputDecision,
+    ) -> None:
+        traces.record(
+            state["run_id"],
+            "output_guardrail",
+            "completed",
+            {
+                "guardrail_id": decision.guardrail_id,
+                "category": decision.category,
+                "action": "blocked",
+            },
+        )
+
     def complete_reply(
         state: AgentState,
         *,
@@ -250,13 +318,24 @@ def build_support_graph(
         has_context = bool(state.get("context"))
         proposal_data: dict[str, Any] | None = None
         if structured_reply is not None:
-            reply = structured_reply(
-                question,
-                state.get("context", []),
-                state.get("memory_context", []),
-                fixed_answer=fixed_answer,
-                customer_id=state.get("customer_id"),
-            )
+            try:
+                reply = structured_reply(
+                    question,
+                    state.get("context", []),
+                    state.get("memory_context", []),
+                    fixed_answer=fixed_answer,
+                    customer_id=state.get("customer_id"),
+                )
+            except InvalidStructuredSupportReply:
+                decision = OutputDecision(
+                    False, "invalid_output_schema", "structural",
+                )
+                record_output_rejection(state, decision)
+                return fixed_answer or SAFE_OUTPUT_FALLBACK, False
+            decision = validate_support_reply(reply)
+            if not decision.allowed:
+                record_output_rejection(state, decision)
+                return fixed_answer or SAFE_OUTPUT_FALLBACK, False
             answer = reply["answer"].strip()
             proposal_data = reply.get("propuesta_memoria")
         elif has_context:
@@ -264,8 +343,14 @@ def build_support_graph(
             answer = fallback_generate(question, state["context"]).strip()
         else:
             answer = fixed_answer or ""
-        if not answer:
-            raise RuntimeError("Support-agent generation returned an empty answer.")
+            if not answer:
+                raise RuntimeError("Support-agent generation returned an empty answer.")
+
+        if structured_reply is None:
+            decision = validate_answer_text(answer)
+            if not decision.allowed:
+                record_output_rejection(state, decision)
+                return fixed_answer or SAFE_OUTPUT_FALLBACK, False
 
         saved_proposal = False
         if proposal_data and state.get("actor_role") in APPROVER_ROLES:
@@ -311,7 +396,13 @@ def build_support_graph(
         valid = bool(state["question"].strip())
         error = None if valid else "question_required"
         if not valid:
-            return {"error": error}, {"valid": False, "error": error}
+            return {"error": error}, {
+                "valid": False,
+                "error": error,
+                "guardrail_id": "invalid_input",
+                "category": "structural",
+                "action": "blocked",
+            }
         plan = plan_question(state["question"])
         memories = memory_store.retrieve(
             state["question"],
@@ -625,6 +716,26 @@ class SupportAgent:
     ) -> AgentState:
         execution_id = run_id or str(uuid4())
         conversation = conversation_id or execution_id
+        decision = inspect_user_input(question)
+        if decision.action != "allow":
+            self.traces.record(
+                execution_id,
+                "input_guardrail",
+                "completed",
+                {
+                    "guardrail_id": decision.guardrail_id,
+                    "category": decision.category,
+                    "action": decision.action,
+                },
+            )
+            return self._immediate_result(
+                decision.answer or "No puedo procesar esa solicitud.",
+                execution_id,
+                conversation,
+                customer_id,
+                actor_id,
+                actor_role,
+            )
         current_question = question
         if actor_role in APPROVER_ROLES:
             pending = self.memory_store.get_pending(
@@ -764,7 +875,7 @@ class SupportAgent:
                         actor_role,
                     )
 
-        return self.graph.invoke(
+        result = self.graph.invoke(
             {
                 "question": current_question,
                 "context": [],
@@ -783,6 +894,21 @@ class SupportAgent:
                 "metadata": {"run_id": execution_id},
             },
         )
+        if result.get("error") is None:
+            decision = validate_answer_text(result.get("answer"))
+            if not decision.allowed:
+                self.traces.record(
+                    execution_id,
+                    "output_guardrail",
+                    "completed",
+                    {
+                        "guardrail_id": decision.guardrail_id,
+                        "category": decision.category,
+                        "action": "blocked",
+                    },
+                )
+                result["answer"] = SAFE_OUTPUT_FALLBACK
+        return result
 
     @staticmethod
     def _immediate_result(
@@ -822,6 +948,9 @@ class SupportAgent:
 
     def get_trace(self, run_id: str) -> list[TraceEvent]:
         return self.traces.get(run_id)
+
+    def get_guardrail_summary(self) -> dict[str, Any]:
+        return self.traces.guardrail_summary()
 
     def close(self) -> None:
         self._checkpoint_connection.close()

@@ -11,7 +11,6 @@ from server import app
 from services.agent.support import SupportAgent, get_support_agent
 from services.api.users.auth import get_current_user
 
-
 NORMAL_USER = SimpleNamespace(
     id=1,
     is_active=True,
@@ -125,6 +124,31 @@ def test_trace_requires_authentication() -> None:
     response = client.get("/agent/traces/run-id")
 
     assert response.status_code == 401
+
+
+def test_guardrail_summary_requires_authentication() -> None:
+    client = TestClient(app)
+    response = client.get("/agent/guardrails/summary")
+
+    assert response.status_code == 401
+
+
+def test_guardrail_summary_returns_aggregated_counts(client: TestClient) -> None:
+    agent = Mock()
+    agent.get_guardrail_summary.return_value = {
+        "total": 1,
+        "by_type": {"structural": 0, "content": 0, "security": 1},
+        "by_guardrail": {
+            "instruction_override": {"blocked": 1, "redirected": 0},
+        },
+    }
+    with patch("services.agent.routes.get_support_agent", return_value=agent):
+        response = client.get("/agent/guardrails/summary")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["by_type"]["security"] == 1
+    assert response.json()["by_guardrail"]["instruction_override"]["blocked"] == 1
 
 
 def test_trace_lookup_does_not_expose_checkpoints(client: TestClient) -> None:
