@@ -22,6 +22,7 @@ from data_project.pipelines.rag import (
     generate_support_reply,
     retrieve,
 )
+from services.agent.guardrails import inspect_user_input
 from services.agent.mcp_tools import query_incidents, query_inventory
 from services.agent.memory import (
     APPROVER_ROLES,
@@ -625,6 +626,26 @@ class SupportAgent:
     ) -> AgentState:
         execution_id = run_id or str(uuid4())
         conversation = conversation_id or execution_id
+        decision = inspect_user_input(question)
+        if decision.action != "allow":
+            self.traces.record(
+                execution_id,
+                "input_guardrail",
+                "completed",
+                {
+                    "guardrail_id": decision.guardrail_id,
+                    "category": decision.category,
+                    "action": decision.action,
+                },
+            )
+            return self._immediate_result(
+                decision.answer or "No puedo procesar esa solicitud.",
+                execution_id,
+                conversation,
+                customer_id,
+                actor_id,
+                actor_role,
+            )
         current_question = question
         if actor_role in APPROVER_ROLES:
             pending = self.memory_store.get_pending(
