@@ -184,3 +184,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadió un guard de entrada determinista antes de resolver memoria, consultar fuentes o generar respuestas. Rechaza intentos de cambio de instrucciones y uso personal, permite saludos/hora en Tokio con redirección y redirige consultas fuera de dominio.
 - Los bloqueos/redirecciones quedan en la traza con identificador, categoría y acción, sin guardar el texto del usuario. Se añadieron pruebas offline para cuatro ataques, tareas personales y small talk.
 - Validación: `tests/pipelines/test_support_agent_guardrails.py` (9 passed), `tests/pipelines/test_support_agent_graph.py` (8 passed) y Ruff focalizado aprobado.
+
+## Guardrails del agente de soporte — paso 2
+
+- Se reforzó el system prompt del agente interno: define dominio Nexova, small talk, rechazo personal, jerarquía de instrucciones y tratamiento de usuario/RAG/tools/memoria como datos no confiables serializados en el mensaje user.
+- Se valida el esquema exacto de `answer`/`propuesta_memoria`, el contenido sensible y secretos antes de guardar propuestas y antes de devolver la respuesta. Las salidas rechazadas usan fallback y no escriben memoria.
+- Validación offline: guardrails, memoria y grafo, `29 passed`. Ruff focalizado pasa; `rag.py` conserva un `F841` preexistente en `retrieve` (ignorado solo para el chequeo de ese archivo). La prueba complementaria de timeout operativo requiere configuración LLM porque el flujo existente evalúa memoria después de componer la respuesta.

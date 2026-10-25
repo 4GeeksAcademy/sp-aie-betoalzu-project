@@ -4,6 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 
@@ -13,6 +14,13 @@ class InputDecision:
     guardrail_id: str | None = None
     category: str | None = None
     answer: str | None = None
+
+
+@dataclass(frozen=True)
+class OutputDecision:
+    allowed: bool
+    guardrail_id: str | None = None
+    category: str | None = None
 
 
 _INSTRUCTION_OVERRIDE = re.compile(
@@ -46,11 +54,42 @@ _ACADEMIC_TASK = re.compile(
     r"\b(tarea|deberes|ensayo|examen|homework|assignment|essay)\b"
     r".{0,80}\b(universidad|universitaria|escuela|colegio|clase|university|school)\b"
 )
+_MEMORY_RESPONSE = re.compile(
+    r"^(si|si[, ]+confirmo|confirmo|apruebo|lo apruebo|no|no gracias|rechazo|"
+    r"lo rechazo|no lo guardes|no lo recuerdes)[.!? ]*$"
+)
 _DOMAIN_TERMS = re.compile(
-    r"\b(nexova|seleccion|headhunting|outsourcing|formacion|soporte|servicio|"
-    r"proceso|incidente|ticket|inventario|stock|producto|proveedor|cliente|"
-    r"sla|escalacion|candidato|contratacion|reclutamiento|tarifa|precio|"
-    r"facturacion|helpdesk|horario|atencion|soporte al cliente)\b"
+    r"\b(nexova|seleccion|headhunting|outsourcing|formacion|soporte|servicios?|"
+    r"procesos?|procedimientos?|incidentes?|tickets?|escalar|escalacion|"
+    r"inventario|stock|productos?|proveedores?|clientes?|premium|sla|"
+    r"candidatos?|contratacion|reclutamiento|tarifas?|precios?|facturacion|"
+    r"helpdesk|horarios?|atencion|soporte al cliente)\b"
+)
+_INTERNAL_OUTPUT = re.compile(
+    r"\b(system prompt|prompt del sistema|instrucciones internas|internal "
+    r"instructions|razonamiento privado|chain of thought|developer message)\b"
+)
+_SECRET_OUTPUT = re.compile(
+    r"\b(?:bearer\s+[a-z0-9._~+/-]{20,}|(?:sk|rk|ghp|github_pat)-"
+    r"[a-z0-9_-]{12,})\b",
+    re.IGNORECASE,
+)
+_CANDIDATE_REFERENCE = re.compile(r"\b(candidato|candidata|curriculum|cv|entrevista)\b")
+_CANDIDATE_PII = re.compile(
+    r"[\w.+-]+@[\w.-]+\.\w{2,}|\b(?:\+?\d[\d ()-]{7,}\d)\b"
+)
+_CANDIDATE_SENSITIVE_FACT = re.compile(
+    r"\b(salario|sueldo|remuneracion|nota de entrevista|evaluacion de candidato|"
+    r"calificacion de candidato)\b.{0,60}\b(negociacion|activa|\d{2,})\b"
+)
+_SUPPORT_REPLY_FIELDS = frozenset({"answer", "propuesta_memoria"})
+_MEMORY_PROPOSAL_FIELDS = frozenset({
+    "business_area", "category", "customer_id", "subject", "fact", "reason",
+    "source_reference",
+})
+SAFE_OUTPUT_FALLBACK = (
+    "No puedo ofrecer una respuesta validada ahora. Reformula la consulta o "
+    "contacta con soporte de Nexova."
 )
 
 
@@ -96,6 +135,9 @@ def inspect_user_input(question: str) -> InputDecision:
             ),
         )
 
+    if _MEMORY_RESPONSE.fullmatch(normalized):
+        return InputDecision(action="allow")
+
     if "hora" in normalized and any(place in normalized for place in ("tokio", "japon")):
         current_time = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%H:%M")
         return InputDecision(
@@ -134,3 +176,34 @@ def inspect_user_input(question: str) -> InputDecision:
         )
 
     return InputDecision(action="allow")
+
+
+def validate_answer_text(answer: Any) -> OutputDecision:
+    if not isinstance(answer, str) or not answer.strip():
+        return OutputDecision(False, "invalid_output_schema", "structural")
+
+    normalized = _normalize(answer)
+    if _INTERNAL_OUTPUT.search(normalized) or _SECRET_OUTPUT.search(answer):
+        return OutputDecision(False, "sensitive_output", "security")
+
+    if _CANDIDATE_REFERENCE.search(normalized):
+        has_pii = _CANDIDATE_PII.search(answer)
+        has_restricted_fact = _CANDIDATE_SENSITIVE_FACT.search(normalized)
+        if has_pii or has_restricted_fact:
+            return OutputDecision(False, "restricted_candidate_data", "security")
+
+    return OutputDecision(True)
+
+
+def validate_support_reply(reply: Any) -> OutputDecision:
+    if not isinstance(reply, dict) or set(reply) != _SUPPORT_REPLY_FIELDS:
+        return OutputDecision(False, "invalid_output_schema", "structural")
+
+    proposal = reply["propuesta_memoria"]
+    if proposal is not None and (
+        not isinstance(proposal, dict)
+        or set(proposal) != _MEMORY_PROPOSAL_FIELDS
+    ):
+        return OutputDecision(False, "invalid_memory_proposal_schema", "structural")
+
+    return validate_answer_text(reply["answer"])
