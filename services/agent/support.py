@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sqlite3
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -152,6 +153,50 @@ class TraceStore:
             }
             for sequence, node_name, status, timestamp, output_json in rows
         ]
+
+    def guardrail_summary(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT output_json
+                FROM support_agent_traces
+                WHERE status = 'completed'
+                    AND node_name IN (
+                        'input_guardrail', 'output_guardrail', 'receive_question'
+                    )
+                """
+            ).fetchall()
+
+        by_type: Counter[str] = Counter()
+        by_guardrail: dict[str, Counter[str]] = {}
+        for (output_json,) in rows:
+            output = json.loads(output_json)
+            guardrail_id = output.get("guardrail_id")
+            category = output.get("category")
+            action = output.get("action")
+            if (
+                not isinstance(guardrail_id, str)
+                or category not in {"structural", "content", "security"}
+                or action not in {"blocked", "redirected"}
+            ):
+                continue
+            by_type[category] += 1
+            by_guardrail.setdefault(guardrail_id, Counter())[action] += 1
+
+        return {
+            "total": sum(by_type.values()),
+            "by_type": {
+                category: by_type[category]
+                for category in ("structural", "content", "security")
+            },
+            "by_guardrail": {
+                guardrail_id: {
+                    action: counts[action]
+                    for action in ("blocked", "redirected")
+                }
+                for guardrail_id, counts in sorted(by_guardrail.items())
+            },
+        }
 
 
 NodeOperation = Callable[[AgentState], tuple[dict[str, Any], dict[str, Any]]]
@@ -351,7 +396,13 @@ def build_support_graph(
         valid = bool(state["question"].strip())
         error = None if valid else "question_required"
         if not valid:
-            return {"error": error}, {"valid": False, "error": error}
+            return {"error": error}, {
+                "valid": False,
+                "error": error,
+                "guardrail_id": "invalid_input",
+                "category": "structural",
+                "action": "blocked",
+            }
         plan = plan_question(state["question"])
         memories = memory_store.retrieve(
             state["question"],
@@ -897,6 +948,9 @@ class SupportAgent:
 
     def get_trace(self, run_id: str) -> list[TraceEvent]:
         return self.traces.get(run_id)
+
+    def get_guardrail_summary(self) -> dict[str, Any]:
+        return self.traces.guardrail_summary()
 
     def close(self) -> None:
         self._checkpoint_connection.close()

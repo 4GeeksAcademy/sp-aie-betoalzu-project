@@ -198,6 +198,10 @@ def test_real_incident_tool_timeout_does_not_block_graph(tmp_path, monkeypatch):
     agent = SupportAgent(
         tmp_path / "agent.sqlite3", incidents_fn=query_incidents,
         retrieve_fn=Mock(side_effect=AssertionError("RAG must not be called")),
+        structured_generate_fn=lambda _question, _context, _memories, **kwargs: {
+            "answer": kwargs["fixed_answer"] or "Respuesta operativa.",
+            "propuesta_memoria": None,
+        },
     )
     try:
         result = agent.invoke("Consulta el estado del ticket 17.")
