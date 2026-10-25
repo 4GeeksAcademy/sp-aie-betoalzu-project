@@ -13,6 +13,7 @@ from services.api.users.auth import get_current_user
 
 
 NORMAL_USER = SimpleNamespace(
+    id=1,
     is_active=True,
     role=SimpleNamespace(value="user"),
 )
@@ -88,10 +89,14 @@ def test_query_returns_answer_and_trace(client: TestClient) -> None:
         body = response.json()
         assert body["answer"] == "La tarifa estándar es del 22%."
         assert body["run_id"]
-        agent.invoke.assert_called_once_with(
-            "¿Cuál es la tarifa?",
-            run_id=body["run_id"],
-        )
+        invoke_args = agent.invoke.call_args.args
+        invoke_kwargs = agent.invoke.call_args.kwargs
+        assert invoke_args == ("¿Cuál es la tarifa?",)
+        assert invoke_kwargs["run_id"] == body["run_id"]
+        assert invoke_kwargs["actor_id"] == "1"
+        assert invoke_kwargs["actor_role"] == "user"
+        assert invoke_kwargs["conversation_id"] == body["conversation_id"]
+        assert body["conversation_id"]
         trace = client.get(f"/agent/traces/{body['run_id']}")
         assert trace.status_code == 200
         assert trace.json()["run_id"] == body["run_id"]
