@@ -227,3 +227,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 
 - El fan-out por departamento ahora es parte del grafo LangGraph de RFP mediante `Send`, seguido por el ensamblado del handoff; se mantiene la evaluación paralela por sección. Se reforzó la prueba offline para comprobar ejecución concurrente de generadores sin LLM.
 - Se actualizó la documentación de Parte 2. Validación final focalizada de API, generación e intake: `23 passed`; Ruff y `git diff --check` correctos.
+
+## Aprobación y cierre de RFP — decisiones pendientes
+
+- La implementación de Parte 3 está bloqueada hasta confirmar quién puede aprobar cada departamento y el formato/estructura aprobados del documento final. El backend actual autentica usuarios y ofrece roles globales, pero no autoriza por departamento; no se debe usar esa autenticación sola como permiso de aprobación.
+- El usuario confirmó que los aprobadores y el formato final siguen pendientes, y que el arbitraje debe permanecer inhabilitado mientras no existan triggers estructurados y una regla/arbitro de negocio autorizados.
+- No habilitar aprobaciones, arbitraje ni generación/cierre del documento final hasta recibir esas decisiones. El adjunto de requisitos es una instantánea de solo lectura y permanece sin cambios.
