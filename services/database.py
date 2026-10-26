@@ -10,6 +10,7 @@ from tinydb import TinyDB
 
 # Import ORM models so SQLModel.metadata discovers them
 import services.models  # noqa: F401
+import services.api.rfp_intake.models  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Environment

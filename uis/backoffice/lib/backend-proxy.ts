@@ -57,7 +57,7 @@ export async function proxyToBackend(options: ProxyOptions): Promise<NextRespons
       ...init,
       cache: 'no-store',
       headers: {
-        'Content-Type': 'application/json',
+        ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
         ...(authHeader ? { Authorization: authHeader } : {}),
         ...(init?.headers || {}),
       },
