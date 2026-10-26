@@ -51,6 +51,7 @@ class ComplianceResult(BaseModel):
     pass_: bool = Field(alias="pass")
     rule_ids: list[str] = Field(default_factory=list)
     violations: list[str] = Field(default_factory=list)
+    currencies_mentioned: list[Literal["EUR", "USD"]] = Field(default_factory=list)
 
 
 class EvaluationResult(BaseModel):
@@ -64,6 +65,7 @@ class EvaluationResult(BaseModel):
     overall_pass: bool
     feedback_for_generator: str = Field(min_length=1)
     draft_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    structured_facts: dict[str, str | int] = Field(default_factory=dict)
 
 
 class ExistingSection(TypedDict, total=False):
@@ -269,13 +271,60 @@ def _compliance_evaluator(
             "genérica del sector en lugar del nombre del cliente."
         )
 
+    currency_mentions: list[Literal["EUR", "USD"]] = []
+    if re.search(r"\bEUR\b|€", draft_content, flags=re.IGNORECASE):
+        currency_mentions.append("EUR")
+    if re.search(r"\bUSD\b|\$", draft_content, flags=re.IGNORECASE):
+        currency_mentions.append("USD")
+
     return ComplianceResult.model_validate(
         {
             "pass": not violations,
             "rule_ids": rule_ids,
             "violations": violations,
+            "currencies_mentioned": currency_mentions,
         }
     )
+
+
+def _extract_structured_facts(draft_content: str) -> dict[str, str | int]:
+    facts: dict[str, str | int] = {}
+    labelled_days = (
+        (
+            "time_to_close_business_days",
+            (
+                r"(?:time[_ ]to[_ ]close|tiempo estimado de cierre|cierre estimado)"
+                r"\s*[:=]\s*(\d+)\s*d[ií]as?\s*h[aá]biles"
+            ),
+        ),
+        (
+            "training_start_business_days",
+            (
+                r"(?:training[_ ]start|inicio de formaci[oó]n|ventana de formaci[oó]n)"
+                r"\s*[:=]\s*(\d+)\s*d[ií]as?\s*h[aá]biles"
+            ),
+        ),
+    )
+    for fact_name, pattern in labelled_days:
+        match = re.search(pattern, draft_content, flags=re.IGNORECASE)
+        if match:
+            facts[fact_name] = int(match.group(1))
+
+    cohort = re.search(
+        r"(?:cohort(?:_id)?|cohorte)\s*[:=]\s*([^\n;,.]+)",
+        draft_content,
+        flags=re.IGNORECASE,
+    )
+    if cohort:
+        facts["cohort_key"] = cohort.group(1).strip().casefold()
+    roles = re.search(
+        r"(?:roles?|puestos?)\s*[:=]\s*([^\n;,.]+)",
+        draft_content,
+        flags=re.IGNORECASE,
+    )
+    if roles:
+        facts["roles_key"] = " ".join(roles.group(1).casefold().split())
+    return facts
 
 
 def _build_feedback(
@@ -338,6 +387,7 @@ def _evaluate_draft(
             readability, relevance, compliance
         ),
         draft_sha256=_draft_digest(draft_content),
+        structured_facts=_extract_structured_facts(draft_content),
     )
     return result
 
@@ -398,7 +448,11 @@ def _process_department(
         prior_result.get("feedback_for_generator") if prior_result else None
     )
 
-    if prior_result and prior_result.get("overall_pass"):
+    force_revision = (
+        isinstance(prior_state, dict)
+        and prior_state.get("section_status") == "needs_revision"
+    )
+    if prior_result and prior_result.get("overall_pass") and not force_revision:
         section_status = "ready_for_approval"
         result_bundle = dict(prior_state)
     elif iteration_count >= MAX_GENERATION_ATTEMPTS and prior_result:
@@ -457,9 +511,14 @@ def _validate_handoff(handoff: dict[str, Any], ticket_id: str) -> list[dict[str,
     if (
         not isinstance(handoff, dict)
         or handoff.get("ticket_id") != ticket_id
-        or handoff.get("schema_version") != "1.0"
+        or handoff.get("schema_version") not in {"1.0", "2.0"}
     ):
         raise RfpIntakeError("El handoff de RFP no corresponde al ticket solicitado.")
+    if handoff.get("schema_version") == "2.0" and (
+        handoff.get("response_generation_version") != RESPONSE_SCHEMA_VERSION
+        or not isinstance(handoff.get("response_generation"), dict)
+    ):
+        raise RfpIntakeError("El handoff de Parte 2 no es compatible para revisión.")
     metadata = handoff.get("metadata")
     if (
         not isinstance(metadata, dict)
