@@ -196,3 +196,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se agregó `GET /agent/guardrails/summary`, autenticado con la dependencia existente, con agregados por categoría, guardrail y acción obtenidos de trazas SQLite. No expone texto de usuario, salida, documentos ni secretos.
 - Las entradas vacías registran la activación estructural en el evento de validación existente. Tests verifican resumen de entrada/salida y acceso anónimo/autenticado al endpoint mediante una app FastAPI mínima.
 - Validación offline del agente: `52 passed`. Ruff pasa en los archivos modificados, ignorando solo reglas preexistentes (`B008` en rutas y `F841` en `rag.py`). La suite API completa no se pudo recolectar porque este entorno no tiene Prefect.
+
+## Recepción RFP — tarea 1: grafo de análisis
+
+- Se creó `data_project/pipelines/rfp_intake/` con conversión previa a Markdown mediante MarkItDown, clasificación estructurada, extracción con evidencia/preguntas abiertas, activación determinista de departamentos, workers paralelizables y handoff versionado `1.0`.
+- Los workers reciben únicamente metadatos compartidos y su extracto; el grafo no incorpora propuestas ni datos ausentes. Se registran métricas de legibilidad como conteos/unidades con sus limitaciones.
+- Se añadieron pruebas offline de RFP formal/informal, pitch rechazado, orden conversión-clasificación y ausencia de invención de volúmenes. Validación: `6 passed`, Ruff y `git diff --check` correctos.
+- Los PDFs de aceptación bajo `rfp-requests/nexova/` no están disponibles en este entorno; no se crearon fixtures que los simulen.
