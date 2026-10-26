@@ -230,6 +230,6 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 
 ## Aprobación y cierre de RFP — decisiones pendientes
 
-- La implementación de Parte 3 está bloqueada hasta confirmar quién puede aprobar cada departamento y el formato/estructura aprobados del documento final. El backend actual autentica usuarios y ofrece roles globales, pero no autoriza por departamento; no se debe usar esa autenticación sola como permiso de aprobación.
-- El usuario confirmó que los aprobadores y el formato final siguen pendientes, y que el arbitraje debe permanecer inhabilitado mientras no existan triggers estructurados y una regla/arbitro de negocio autorizados.
-- No habilitar aprobaciones, arbitraje ni generación/cierre del documento final hasta recibir esas decisiones. El adjunto de requisitos es una instantánea de solo lectura y permanece sin cambios.
+- El usuario autorizó a cualquier usuario con rol global `admin` a aprobar todas las secciones activas. Aunque el backend no mantiene una matriz por departamento, esta autorización explícita define el alcance solicitado para los aprobadores.
+- El formato/estructura del documento final sigue pendiente. El arbitraje debe permanecer inhabilitado mientras no existan triggers estructurados y una regla/arbitro de negocio autorizados.
+- La Parte 3 no está implementada; no habilitar su flujo ni sintetizar/marcar terminado hasta que se defina el formato final y la implementación mantenga transiciones de estado coherentes. El adjunto de requisitos es una instantánea de solo lectura y permanece sin cambios.
