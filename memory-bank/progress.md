@@ -210,3 +210,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - La API autenticada valida tipo, firma y tamaño del PDF, lo persiste con nombre UUID y permisos `0600`, y ofrece carga asíncrona, listado, consulta y reintento del mismo ticket.
 - Metadatos, secciones, handoff y cambio a `analisis_completo` se confirman juntos. Los tickets quedan aislados por usuario; la clasificación negativa persiste como `descartado` y los errores técnicos quedan visibles sin exponer contenido del archivo.
 - Se documentó el contrato de handoff v1. Validación combinada API/pipeline: `11 passed`; Ruff, compilación, OpenAPI y `git diff --check` correctos.
+
+## Generación de respuestas RFP — Parte 2, paso 1
+
+- Se añadió generación identificable por departamento desde el handoff, sin releer el PDF ni exponer a un generador extractos de otros departamentos. Las secciones se procesan en paralelo; legibilidad, pertinencia y cumplimiento se evalúan concurrentemente.
+- El ciclo cuenta hasta tres evaluaciones válidas por sección. Los errores técnicos no consumen intentos; las secciones aprobadas no se repiten y los borradores agotados conservan evaluación estructurada, estado de revisión y digest del contenido evaluado.
+- Se documentaron métrica/umbral de legibilidad, reglas evaluadas, feedback y esquema de handoff 2.0. Pruebas offline de respuesta y regresión de recepción: `15 passed`; Ruff y `git diff --check` correctos.
