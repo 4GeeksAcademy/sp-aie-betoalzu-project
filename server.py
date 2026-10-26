@@ -25,6 +25,10 @@ from services.api.profiles.routes import profiles_api
 from services.api.inventory.routes import inventory_api
 from services.api.telemetry.routes import telemetry_api
 from services.api.knowledge.routes import knowledge_api
+from services.api.rfp_intake.routes import (
+    recover_interrupted_rfp_intake,
+    rfp_intake_api,
+)
 from services.reporting.routes import reporting_api
 from services.agent.routes import agent_api
 from services.agent.support import (
@@ -39,6 +43,7 @@ from services.database import init_db
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: runs startup tasks before yielding, shutdown after."""
     init_db()  # Create SQLModel tables on Supabase/PostgreSQL
+    recover_interrupted_rfp_intake()
     initialize_support_agent()
     memory_maintenance = asyncio.create_task(support_memory_consolidation_loop())
     try:
@@ -73,6 +78,7 @@ app.include_router(profiles_api)
 app.include_router(inventory_api)
 app.include_router(telemetry_api)
 app.include_router(knowledge_api)
+app.include_router(rfp_intake_api)
 app.include_router(reporting_api)
 app.include_router(agent_api)
 

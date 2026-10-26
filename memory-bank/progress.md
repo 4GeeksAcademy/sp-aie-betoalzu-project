@@ -203,3 +203,10 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Los workers reciben únicamente metadatos compartidos y su extracto; el grafo no incorpora propuestas ni datos ausentes. Se registran métricas de legibilidad como conteos/unidades con sus limitaciones.
 - Se añadieron pruebas offline de RFP formal/informal, pitch rechazado, orden conversión-clasificación y ausencia de invención de volúmenes. Validación: `6 passed`, Ruff y `git diff --check` correctos.
 - Los PDFs de aceptación bajo `rfp-requests/nexova/` no están disponibles en este entorno; no se crearon fixtures que los simulen.
+
+## Recepción RFP — tarea 2: persistencia y API
+
+- Se añadieron las tablas SQLModel para tickets, metadatos, secciones departamentales y handoff; FastAPI las registra y recupera ejecuciones interrumpidas.
+- La API autenticada valida tipo, firma y tamaño del PDF, lo persiste con nombre UUID y permisos `0600`, y ofrece carga asíncrona, listado, consulta y reintento del mismo ticket.
+- Metadatos, secciones, handoff y cambio a `analisis_completo` se confirman juntos. Los tickets quedan aislados por usuario; la clasificación negativa persiste como `descartado` y los errores técnicos quedan visibles sin exponer contenido del archivo.
+- Se documentó el contrato de handoff v1. Validación combinada API/pipeline: `11 passed`; Ruff, compilación, OpenAPI y `git diff --check` correctos.
