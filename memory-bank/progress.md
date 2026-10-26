@@ -210,3 +210,20 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - La API autenticada valida tipo, firma y tamaño del PDF, lo persiste con nombre UUID y permisos `0600`, y ofrece carga asíncrona, listado, consulta y reintento del mismo ticket.
 - Metadatos, secciones, handoff y cambio a `analisis_completo` se confirman juntos. Los tickets quedan aislados por usuario; la clasificación negativa persiste como `descartado` y los errores técnicos quedan visibles sin exponer contenido del archivo.
 - Se documentó el contrato de handoff v1. Validación combinada API/pipeline: `11 passed`; Ruff, compilación, OpenAPI y `git diff --check` correctos.
+
+## Generación de respuestas RFP — Parte 2, paso 1
+
+- Se añadió generación identificable por departamento desde el handoff, sin releer el PDF ni exponer a un generador extractos de otros departamentos. Las secciones se procesan en paralelo; legibilidad, pertinencia y cumplimiento se evalúan concurrentemente.
+- El ciclo cuenta hasta tres evaluaciones válidas por sección. Los errores técnicos no consumen intentos; las secciones aprobadas no se repiten y los borradores agotados conservan evaluación estructurada, estado de revisión y digest del contenido evaluado.
+- Se documentaron métrica/umbral de legibilidad, reglas evaluadas, feedback y esquema de handoff 2.0. Pruebas offline de respuesta y regresión de recepción: `15 passed`; Ruff y `git diff --check` correctos.
+
+## Generación de respuestas RFP — Parte 2, paso 2
+
+- Se añadió `POST /rfp-intake/tickets/{ticket_id}/generate` al router autenticado existente. Carga y contrasta handoff, metadatos y secciones de Parte 1; cada evaluación válida persiste borrador y resultado juntos, y el cierre actualiza secciones, ticket y handoff 2.0 en una transacción.
+- Se exponen estados de generación/evaluación/revisión, se rechazan ejecuciones duplicadas y se conservan resultados parciales para reanudar. Errores técnicos mantienen el ticket recuperable y no descartan el RFP; la recuperación de ejecuciones interrumpidas verifica la marca temporal para no permitir que una tarea antigua sobrescriba un reintento.
+- Se documentó el endpoint y su persistencia. Pruebas API y pipeline RFP: `23 passed`; Ruff y `git diff --check` correctos.
+
+## Generación de respuestas RFP — integración del grafo dedicado
+
+- El fan-out por departamento ahora es parte del grafo LangGraph de RFP mediante `Send`, seguido por el ensamblado del handoff; se mantiene la evaluación paralela por sección. Se reforzó la prueba offline para comprobar ejecución concurrente de generadores sin LLM.
+- Se actualizó la documentación de Parte 2. Validación final focalizada de API, generación e intake: `23 passed`; Ruff y `git diff --check` correctos.
