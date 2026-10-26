@@ -437,10 +437,20 @@ def _process_department(
 
 
 def _validate_handoff(handoff: dict[str, Any], ticket_id: str) -> list[dict[str, Any]]:
-    if not isinstance(handoff, dict) or handoff.get("ticket_id") != ticket_id:
+    if (
+        not isinstance(handoff, dict)
+        or handoff.get("ticket_id") != ticket_id
+        or handoff.get("schema_version") != "1.0"
+    ):
         raise RfpIntakeError("El handoff de RFP no corresponde al ticket solicitado.")
     metadata = handoff.get("metadata")
-    if not isinstance(metadata, dict):
+    if (
+        not isinstance(metadata, dict)
+        or metadata.get("client_hq")
+        not in {"España", "Miami", "no_especificado"}
+        or not isinstance(metadata.get("service_types"), list)
+        or not isinstance(metadata.get("departments_needed"), list)
+    ):
         raise RfpIntakeError("El handoff no contiene metadatos RFP válidos.")
     workstreams = handoff.get("active_workstreams")
     aspects_by_department = handoff.get("key_aspects")
@@ -474,7 +484,10 @@ def _validate_handoff(handoff: dict[str, Any], ticket_id: str) -> list[dict[str,
                 "key_aspects": key_aspects,
             }
         )
-    if set(aspects_by_department) != seen:
+    if (
+        set(aspects_by_department) != seen
+        or set(metadata["departments_needed"]) != seen
+    ):
         raise RfpIntakeError(
             "Los key_aspects del handoff no corresponden a sus departamentos activos."
         )

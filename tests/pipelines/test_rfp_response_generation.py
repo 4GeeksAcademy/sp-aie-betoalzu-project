@@ -16,6 +16,7 @@ def _handoff() -> dict:
             "client_name": "Cliente de prueba",
             "client_hq": "España",
             "service_types": ["headhunting", "customer_support"],
+            "departments_needed": ["seleccion", "soporte"],
             "open_questions": ["Falta el presupuesto."],
             "department_extracts": {
                 "seleccion": "Extracto privado de selección",
@@ -284,7 +285,11 @@ def test_failed_evaluation_does_not_consume_iteration_or_persist(monkeypatch):
                 **_handoff(),
                 "active_workstreams": [_handoff()["active_workstreams"][0]],
                 "key_aspects": {"seleccion": _handoff()["key_aspects"]["seleccion"]},
-                "metadata": {**_handoff()["metadata"], "service_types": ["headhunting"]},
+                "metadata": {
+                    **_handoff()["metadata"],
+                    "service_types": ["headhunting"],
+                    "departments_needed": ["seleccion"],
+                },
             },
             on_evaluated=lambda *_args: persisted.append(True),
         )

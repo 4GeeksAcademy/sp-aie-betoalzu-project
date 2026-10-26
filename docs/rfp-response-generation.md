@@ -25,3 +25,9 @@ El digest permite comprobar que la evaluación describe exactamente el borrador 
 - El ticket se entrega a Parte 3 en `en-evaluación` si todas las secciones pasan, o `needs_human_review` si alguna agota los intentos.
 
 La generación usa agentes estructurados del pipeline existente. Las pruebas sustituyen esos agentes y no requieren LLM en vivo ni servicios externos.
+
+## Ejecución y persistencia HTTP
+
+El endpoint autenticado `POST /rfp-intake/tickets/{ticket_id}/generate` inicia la Parte 2 solo para tickets en `analisis_completo`. La API carga y contrasta el handoff, metadatos y secciones persistidos; no lee el PDF. Cada evaluación válida actualiza el borrador y su resultado estructurado en la fila de sección. Al finalizar, la API actualiza el handoff y el estado del ticket en una transacción.
+
+Los errores técnicos se registran sin guardar el detalle del documento, devuelven el ticket a `analisis_completo` y permiten reintentar. Las secciones ya evaluadas se reutilizan al reanudar. Las ejecuciones interrumpidas se vuelven recuperables tras el umbral de obsolescencia existente; cada callback verifica la marca de inicio de su ejecución para evitar que una ejecución antigua sobrescriba un reintento.

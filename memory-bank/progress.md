@@ -216,3 +216,9 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadió generación identificable por departamento desde el handoff, sin releer el PDF ni exponer a un generador extractos de otros departamentos. Las secciones se procesan en paralelo; legibilidad, pertinencia y cumplimiento se evalúan concurrentemente.
 - El ciclo cuenta hasta tres evaluaciones válidas por sección. Los errores técnicos no consumen intentos; las secciones aprobadas no se repiten y los borradores agotados conservan evaluación estructurada, estado de revisión y digest del contenido evaluado.
 - Se documentaron métrica/umbral de legibilidad, reglas evaluadas, feedback y esquema de handoff 2.0. Pruebas offline de respuesta y regresión de recepción: `15 passed`; Ruff y `git diff --check` correctos.
+
+## Generación de respuestas RFP — Parte 2, paso 2
+
+- Se añadió `POST /rfp-intake/tickets/{ticket_id}/generate` al router autenticado existente. Carga y contrasta handoff, metadatos y secciones de Parte 1; cada evaluación válida persiste borrador y resultado juntos, y el cierre actualiza secciones, ticket y handoff 2.0 en una transacción.
+- Se exponen estados de generación/evaluación/revisión, se rechazan ejecuciones duplicadas y se conservan resultados parciales para reanudar. Errores técnicos mantienen el ticket recuperable y no descartan el RFP; la recuperación de ejecuciones interrumpidas verifica la marca temporal para no permitir que una tarea antigua sobrescriba un reintento.
+- Se documentó el endpoint y su persistencia. Pruebas API y pipeline RFP: `23 passed`; Ruff y `git diff --check` correctos.

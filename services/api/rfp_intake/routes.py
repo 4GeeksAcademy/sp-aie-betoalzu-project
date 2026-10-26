@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
 
 from data_project.pipelines.rfp_intake.graph import RfpIntakeError
+from data_project.pipelines.rfp_intake.responses import generate_rfp_responses
 from services import database
 from services.api.rfp_intake.models import (
     RfpDepartmentSection,
@@ -76,13 +78,19 @@ def _owned_ticket(
 
 def _mark_if_stale(ticket: RfpTicket) -> bool:
     started_at = ticket.processing_started_at
-    if ticket.status != "analizando" or started_at is None:
+    if ticket.status not in {
+        "analizando",
+        "generando_borrador",
+        "en-evaluación",
+    } or started_at is None:
         return False
     if started_at.tzinfo is None:
         started_at = started_at.replace(tzinfo=UTC)
     if started_at >= datetime.now(UTC) - STALE_AFTER:
         return False
     ticket.processing_error = "La ejecución anterior se interrumpió; puede reintentarse."
+    if ticket.status != "analizando":
+        ticket.status = "analisis_completo"
     ticket.processing_started_at = None
     ticket.updated_at = datetime.now(UTC)
     return True
@@ -257,11 +265,249 @@ def process_rfp_ticket(ticket_id: str) -> None:
         _record_processing_failure(ticket_id, type(exc).__name__)
 
 
+def _load_response_generation_input(
+    session: Session, ticket_id: str
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    handoff = session.get(RfpHandoff, ticket_id)
+    metadata = session.get(RfpMetadataRecord, ticket_id)
+    sections = session.exec(
+        select(RfpDepartmentSection).where(
+            RfpDepartmentSection.ticket_id == ticket_id
+        )
+    ).all()
+    if handoff is None or metadata is None or not sections:
+        raise RfpIntakeError(
+            "No se puede generar la respuesta: faltan datos persistidos de Parte 1."
+        )
+
+    payload = handoff.payload
+    workstreams = payload.get("active_workstreams") if isinstance(payload, dict) else None
+    key_aspects = payload.get("key_aspects") if isinstance(payload, dict) else None
+    handoff_metadata = payload.get("metadata") if isinstance(payload, dict) else None
+    if not isinstance(workstreams, list) or not isinstance(key_aspects, dict):
+        raise RfpIntakeError("El handoff persistido tiene una estructura incompatible.")
+    if not isinstance(handoff_metadata, dict):
+        raise RfpIntakeError("El handoff persistido no contiene metadatos RFP.")
+    department_ids = [
+        item.get("department_id") for item in workstreams if isinstance(item, dict)
+    ]
+    section_by_department = {section.department_id: section for section in sections}
+    if (
+        not department_ids
+        or len(department_ids) != len(workstreams)
+        or len(set(department_ids)) != len(department_ids)
+        or set(department_ids) != set(section_by_department)
+        or set(department_ids) != set(metadata.departments_needed)
+    ):
+        raise RfpIntakeError(
+            "Los departamentos del handoff no coinciden con las secciones persistidas."
+        )
+    metadata_fields = (
+        "client_name",
+        "client_hq",
+        "services_requested",
+        "service_types",
+        "scope",
+        "deadline",
+        "budget_range",
+        "currency",
+        "departments_needed",
+        "open_questions",
+    )
+    if any(
+        handoff_metadata.get(field) != getattr(metadata, field)
+        for field in metadata_fields
+    ):
+        raise RfpIntakeError(
+            "Los metadatos del handoff no coinciden con la persistencia de Parte 1."
+        )
+    existing_sections: dict[str, dict[str, Any]] = {}
+    for department_id in department_ids:
+        section = section_by_department[department_id]
+        if key_aspects.get(department_id) != section.key_aspects:
+            raise RfpIntakeError(
+                f"Los key_aspects persistidos no coinciden para {department_id}."
+            )
+        existing_sections[department_id] = {
+            "draft_content": section.draft_content,
+            "evaluation_results": section.evaluation_results,
+        }
+    if payload.get("ticket_id") != ticket_id:
+        raise RfpIntakeError("El handoff persistido no es válido para este ticket.")
+    return payload, existing_sections
+
+
+def _is_current_generation(ticket: RfpTicket, started_at: datetime) -> bool:
+    current_started_at = ticket.processing_started_at
+    if current_started_at is None:
+        return False
+    if current_started_at.tzinfo is None:
+        current_started_at = current_started_at.replace(tzinfo=UTC)
+    return (
+        ticket.status in {"generando_borrador", "en-evaluación"}
+        and current_started_at == started_at
+    )
+
+
+def _persist_response_phase(
+    ticket_id: str, started_at: datetime, status_value: str
+) -> None:
+    with Session(database.engine) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        if ticket is None or not _is_current_generation(ticket, started_at):
+            raise RfpIntakeError("El ticket ya no está en generación de respuesta.")
+        ticket.status = status_value
+        ticket.updated_at = datetime.now(UTC)
+        session.add(ticket)
+        session.commit()
+
+
+def _persist_response_evaluation(
+    ticket_id: str,
+    started_at: datetime,
+    department_id: str,
+    draft_content: str,
+    evaluation_results: dict[str, Any],
+) -> None:
+    with Session(database.engine) as session:
+        section = session.get(
+            RfpDepartmentSection, (ticket_id, department_id)
+        )
+        ticket = session.get(RfpTicket, ticket_id)
+        if (
+            section is None
+            or ticket is None
+            or not _is_current_generation(ticket, started_at)
+        ):
+            raise RfpIntakeError(
+                f"No se puede persistir la evaluación de {department_id}."
+            )
+        section.draft_content = draft_content
+        section.evaluation_results = evaluation_results
+        session.add(section)
+        session.commit()
+
+
+def _persist_response_generation(
+    ticket_id: str, started_at: datetime, result: dict[str, Any]
+) -> None:
+    with Session(database.engine) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        handoff = session.get(RfpHandoff, ticket_id)
+        if (
+            ticket is None
+            or handoff is None
+            or not _is_current_generation(ticket, started_at)
+        ):
+            raise RfpIntakeError("El ticket o handoff desapareció durante la generación.")
+        for section_result in result["sections"]:
+            section = session.get(
+                RfpDepartmentSection,
+                (ticket_id, section_result["department_id"]),
+            )
+            if section is None:
+                raise RfpIntakeError(
+                    "Una sección desapareció durante la generación de respuestas."
+                )
+            section.draft_content = section_result["draft_content"]
+            section.evaluation_results = section_result["evaluation_results"]
+            session.add(section)
+
+        handoff.payload = result["handoff"]
+        handoff.schema_version = result["handoff"]["schema_version"]
+        handoff.status = result["handoff"]["response_generation"]["status"]
+        ticket.status = result["status"]
+        ticket.processing_error = None
+        ticket.processing_started_at = None
+        ticket.updated_at = datetime.now(UTC)
+        session.add(handoff)
+        session.add(ticket)
+        session.commit()
+
+
+def _record_response_generation_failure(
+    ticket_id: str, started_at: datetime | None, error_type: str
+) -> None:
+    with Session(database.engine) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        if (
+            ticket is None
+            or started_at is None
+            or not _is_current_generation(ticket, started_at)
+        ):
+            return
+        ticket.status = "analisis_completo"
+        ticket.processing_error = f"Error técnico al generar respuestas ({error_type})."
+        ticket.processing_started_at = None
+        ticket.updated_at = datetime.now(UTC)
+        session.add(ticket)
+        session.commit()
+
+
+def process_rfp_response_generation(ticket_id: str) -> None:
+    run_started_at: datetime | None = None
+    try:
+        with Session(database.engine) as session:
+            ticket = session.get(RfpTicket, ticket_id)
+            if (
+                ticket is None
+                or ticket.status not in {"generando_borrador", "en-evaluación"}
+                or ticket.processing_started_at is None
+            ):
+                return
+            run_started_at = ticket.processing_started_at
+            if run_started_at.tzinfo is None:
+                run_started_at = run_started_at.replace(tzinfo=UTC)
+            handoff, existing_sections = _load_response_generation_input(
+                session, ticket_id
+            )
+
+        phases: dict[str, str] = {}
+        phase_lock = threading.Lock()
+
+        def report_phase(phase: str, department_id: str) -> None:
+            with phase_lock:
+                if phase == "completed":
+                    phases.pop(department_id, None)
+                else:
+                    phases[department_id] = phase
+                status_value = (
+                    "generando_borrador"
+                    if "generating" in phases.values()
+                    else "en-evaluación"
+                )
+                _persist_response_phase(ticket_id, run_started_at, status_value)
+
+        result = generate_rfp_responses(
+            ticket_id,
+            handoff,
+            existing_sections=existing_sections,
+            on_phase=report_phase,
+            on_evaluated=lambda department, draft, evaluation: (
+                _persist_response_evaluation(
+                    ticket_id, run_started_at, department, draft, evaluation
+                )
+            ),
+        )
+        _persist_response_generation(ticket_id, run_started_at, result)
+    except (RfpIntakeError, SQLAlchemyError, KeyError, TypeError, ValueError) as exc:
+        logger.error(
+            "RFP response generation failed (ticket_id=%s, error_type=%s)",
+            ticket_id,
+            type(exc).__name__,
+        )
+        _record_response_generation_failure(
+            ticket_id, run_started_at, type(exc).__name__
+        )
+
+
 def recover_interrupted_rfp_intake() -> None:
     with Session(database.engine) as session:
         interrupted = session.exec(
             select(RfpTicket).where(
-                RfpTicket.status == "analizando",
+                RfpTicket.status.in_(
+                    ["analizando", "generando_borrador", "en-evaluación"]
+                ),
                 RfpTicket.processing_started_at.is_not(None),
             )
         ).all()
@@ -370,4 +616,39 @@ def retry_rfp_ticket(
     session.commit()
     session.refresh(ticket)
     background_tasks.add_task(process_rfp_ticket, ticket.ticket_id)
+    return _summary(ticket)
+
+
+@rfp_intake_api.post(
+    "/tickets/{ticket_id}/generate",
+    response_model=TicketSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def generate_rfp_response_ticket(
+    ticket_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: UserInDB = AUTHENTICATED_USER,
+    session: Session = DATABASE_SESSION,
+) -> TicketSummary:
+    ticket = session.exec(
+        select(RfpTicket)
+        .where(RfpTicket.ticket_id == str(ticket_id))
+        .with_for_update()
+    ).first()
+    if ticket is None or ticket.created_by != str(current_user.id):
+        raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+    if ticket.status != "analisis_completo" or ticket.processing_started_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El ticket no está listo para generar respuestas RFP.",
+        )
+
+    ticket.status = "generando_borrador"
+    ticket.processing_error = None
+    ticket.processing_started_at = datetime.now(UTC)
+    ticket.updated_at = datetime.now(UTC)
+    session.add(ticket)
+    session.commit()
+    session.refresh(ticket)
+    background_tasks.add_task(process_rfp_response_generation, ticket.ticket_id)
     return _summary(ticket)
