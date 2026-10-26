@@ -1,6 +1,6 @@
 # Generación y evaluación de respuestas RFP (Parte 2)
 
-La Parte 2 se ejecuta sobre el handoff persistido por la recepción RFP. No recibe ni convierte el PDF. Solo procesa los departamentos presentes en `active_workstreams`, con sus `key_aspects` y metadatos compartidos; cada generador recibe exclusivamente los aspectos de su propio departamento.
+La Parte 2 se ejecuta sobre el handoff persistido por la recepción RFP mediante un grafo LangGraph dedicado. No recibe ni convierte el PDF. El grafo hace fan-out con `Send` solo a los departamentos presentes en `active_workstreams`; cada generador recibe metadatos compartidos sin extractos y los `key_aspects` de su propio departamento. Dentro de cada sección, legibilidad, pertinencia y cumplimiento se evalúan en paralelo y se agregan antes de iterar.
 
 ## Contrato de evaluación y handoff
 

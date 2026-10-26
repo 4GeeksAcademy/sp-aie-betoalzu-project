@@ -5,8 +5,11 @@ import re
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-from typing import Any, Literal, TypedDict
+from operator import add
+from typing import Annotated, Any, Literal, TypedDict
 
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 from pydantic import BaseModel, ConfigDict, Field
 
 from data_project.pipelines.rfp_intake.graph import (
@@ -66,6 +69,20 @@ class EvaluationResult(BaseModel):
 class ExistingSection(TypedDict, total=False):
     draft_content: str | None
     evaluation_results: dict[str, Any] | None
+
+
+class RfpResponseState(TypedDict, total=False):
+    ticket_id: str
+    handoff: dict[str, Any]
+    existing_sections: dict[str, ExistingSection]
+    on_phase: PhaseCallback
+    on_evaluated: EvaluationCallback
+    metadata: dict[str, Any]
+    shared_metadata: dict[str, Any]
+    open_questions: list[str]
+    workstreams: list[dict[str, Any]]
+    section_results: Annotated[list[dict[str, Any]], add]
+    response_result: dict[str, Any]
 
 
 PhaseCallback = Callable[[str, str], None]
@@ -494,54 +511,74 @@ def _validate_handoff(handoff: dict[str, Any], ticket_id: str) -> list[dict[str,
     return validated
 
 
-def generate_rfp_responses(
-    ticket_id: str,
-    handoff: dict[str, Any],
-    existing_sections: dict[str, ExistingSection] | None = None,
-    on_phase: PhaseCallback | None = None,
-    on_evaluated: EvaluationCallback | None = None,
-) -> dict[str, Any]:
-    """Generate and evaluate one section per active department from a stored handoff."""
-    workstreams = _validate_handoff(handoff, ticket_id)
+def _prepare_response_state(state: RfpResponseState) -> dict[str, Any]:
+    handoff = state["handoff"]
+    workstreams = _validate_handoff(handoff, state["ticket_id"])
     metadata = handoff["metadata"]
     open_questions = handoff.get("open_questions", [])
     if not isinstance(open_questions, list):
         raise RfpIntakeError("El handoff contiene preguntas abiertas inválidas.")
-    shared_metadata = {
-        key: value for key, value in metadata.items() if key != "department_extracts"
+    return {
+        "metadata": metadata,
+        "shared_metadata": {
+            key: value for key, value in metadata.items() if key != "department_extracts"
+        },
+        "open_questions": open_questions,
+        "workstreams": workstreams,
     }
-    existing_sections = existing_sections or {}
-    results: dict[str, dict[str, Any]] = {}
-    with ThreadPoolExecutor(max_workers=len(workstreams)) as executor:
-        future_results = {
-            executor.submit(
-                _process_department,
-                workstream["department_id"],
-                shared_metadata,
-                workstream["key_aspects"],
-                open_questions,
-                existing_sections.get(workstream["department_id"], {}),
-                on_phase,
-                on_evaluated,
-            ): workstream["department_id"]
-            for workstream in workstreams
-        }
-        for future, department_id in future_results.items():
-            results[department_id] = future.result()
 
-    active_workstreams: list[dict[str, Any]] = []
-    for workstream in workstreams:
-        active_workstreams.append(
+
+def _dispatch_response_sections(state: RfpResponseState) -> list[Send]:
+    existing_sections = state.get("existing_sections", {})
+    return [
+        Send(
+            "process_department",
             {
-                **workstream,
-                **results[workstream["department_id"]],
-            }
+                "department_id": workstream["department_id"],
+                "metadata": state["shared_metadata"],
+                "key_aspects": workstream["key_aspects"],
+                "open_questions": state["open_questions"],
+                "existing_section": existing_sections.get(
+                    workstream["department_id"], {}
+                ),
+                "on_phase": state.get("on_phase"),
+                "on_evaluated": state.get("on_evaluated"),
+            },
         )
+        for workstream in state["workstreams"]
+    ]
+
+
+def _process_response_department(state: dict[str, Any]) -> dict[str, Any]:
+    section = _process_department(
+        state["department_id"],
+        state["metadata"],
+        state["key_aspects"],
+        state["open_questions"],
+        state["existing_section"],
+        state.get("on_phase"),
+        state.get("on_evaluated"),
+    )
+    return {"section_results": [section]}
+
+
+def _assemble_response_handoff(state: RfpResponseState) -> dict[str, Any]:
+    results = {
+        section["department_id"]: section
+        for section in state.get("section_results", [])
+    }
+    active_workstreams = [
+        {
+            **workstream,
+            **results[workstream["department_id"]],
+        }
+        for workstream in state["workstreams"]
+    ]
     needs_human_review = any(
         section["needs_human_review"] for section in active_workstreams
     )
     response_handoff = {
-        **handoff,
+        **state["handoff"],
         "schema_version": "2.0",
         "response_generation_version": RESPONSE_SCHEMA_VERSION,
         "active_workstreams": active_workstreams,
@@ -560,7 +597,45 @@ def generate_rfp_responses(
         "created_at": datetime.now(UTC).isoformat(),
     }
     return {
-        "status": "needs_human_review" if needs_human_review else "en-evaluación",
-        "handoff": response_handoff,
-        "sections": active_workstreams,
+        "response_result": {
+            "status": "needs_human_review" if needs_human_review else "en-evaluación",
+            "handoff": response_handoff,
+            "sections": active_workstreams,
+        }
     }
+
+
+def _build_response_graph():
+    graph = StateGraph(RfpResponseState)
+    graph.add_node("prepare", _prepare_response_state)
+    graph.add_node("process_department", _process_response_department)
+    graph.add_node("assemble_handoff", _assemble_response_handoff)
+    graph.add_edge(START, "prepare")
+    graph.add_conditional_edges(
+        "prepare",
+        _dispatch_response_sections,
+        ["process_department"],
+    )
+    graph.add_edge("process_department", "assemble_handoff")
+    graph.add_edge("assemble_handoff", END)
+    return graph.compile()
+
+
+def generate_rfp_responses(
+    ticket_id: str,
+    handoff: dict[str, Any],
+    existing_sections: dict[str, ExistingSection] | None = None,
+    on_phase: PhaseCallback | None = None,
+    on_evaluated: EvaluationCallback | None = None,
+) -> dict[str, Any]:
+    """Generate and evaluate one section per active department from a stored handoff."""
+    return _build_response_graph().invoke(
+        {
+            "ticket_id": ticket_id,
+            "handoff": handoff,
+            "existing_sections": existing_sections or {},
+            "on_phase": on_phase,
+            "on_evaluated": on_evaluated,
+            "section_results": [],
+        }
+    )["response_result"]

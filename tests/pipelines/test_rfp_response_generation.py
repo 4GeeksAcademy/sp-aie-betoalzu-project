@@ -47,13 +47,15 @@ def _passing_draft(department_id: str) -> str:
     )
 
 
-def _install_agents(monkeypatch, generator=None):
+def _install_agents(monkeypatch, generator=None, generator_barrier=None):
     calls: list[tuple[str, dict]] = []
 
     def invoke(agent_name, _instruction, payload, response_model):
         calls.append((agent_name, payload))
         if agent_name.startswith("generator_"):
             department_id = agent_name.removeprefix("generator_")
+            if generator_barrier:
+                generator_barrier.wait(timeout=2)
             content = (
                 generator(department_id, payload)
                 if generator
@@ -71,7 +73,7 @@ def _install_agents(monkeypatch, generator=None):
 
 
 def test_generators_receive_only_their_department_aspects(monkeypatch):
-    calls = _install_agents(monkeypatch)
+    calls = _install_agents(monkeypatch, generator_barrier=threading.Barrier(2))
 
     result = responses.generate_rfp_responses("ticket-1", _handoff())
 

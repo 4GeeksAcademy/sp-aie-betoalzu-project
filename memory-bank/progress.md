@@ -222,3 +222,8 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 - Se añadió `POST /rfp-intake/tickets/{ticket_id}/generate` al router autenticado existente. Carga y contrasta handoff, metadatos y secciones de Parte 1; cada evaluación válida persiste borrador y resultado juntos, y el cierre actualiza secciones, ticket y handoff 2.0 en una transacción.
 - Se exponen estados de generación/evaluación/revisión, se rechazan ejecuciones duplicadas y se conservan resultados parciales para reanudar. Errores técnicos mantienen el ticket recuperable y no descartan el RFP; la recuperación de ejecuciones interrumpidas verifica la marca temporal para no permitir que una tarea antigua sobrescriba un reintento.
 - Se documentó el endpoint y su persistencia. Pruebas API y pipeline RFP: `23 passed`; Ruff y `git diff --check` correctos.
+
+## Generación de respuestas RFP — integración del grafo dedicado
+
+- El fan-out por departamento ahora es parte del grafo LangGraph de RFP mediante `Send`, seguido por el ensamblado del handoff; se mantiene la evaluación paralela por sección. Se reforzó la prueba offline para comprobar ejecución concurrente de generadores sin LLM.
+- Se actualizó la documentación de Parte 2. Validación final focalizada de API, generación e intake: `23 passed`; Ruff y `git diff --check` correctos.
