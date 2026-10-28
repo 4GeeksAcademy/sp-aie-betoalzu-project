@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +102,13 @@ class IncidentCreate(BaseModel):
     assigned_to: str | None = Field(default=None, max_length=255)
     ticket_id: str | None = Field(default=None, max_length=50)
 
+    @field_validator("status")
+    @classmethod
+    def require_open_status(cls, value: str) -> str:
+        if value != IncidentStatus.OPEN:
+            raise ValueError("New incidents must start in open status.")
+        return value
+
     @field_validator("title")
     @classmethod
     def title_not_empty(cls, v: str) -> str:
@@ -139,7 +146,10 @@ class IncidentUpdate(BaseModel):
 class IncidentStatusUpdate(BaseModel):
     """Payload for transitioning incident status."""
 
+    model_config = ConfigDict(extra="forbid")
+
     status: IncidentStatus
+    confirm_resolution: StrictBool = False
 
 
 class IncidentOut(BaseModel):
@@ -159,6 +169,8 @@ class IncidentOut(BaseModel):
     ticket_id: str | None = None
     created_at: str
     updated_at: str
+    resolved_by: str | None = None
+    resolution_confirmed_at: str | None = None
 
 
 class IncidentSummary(BaseModel):

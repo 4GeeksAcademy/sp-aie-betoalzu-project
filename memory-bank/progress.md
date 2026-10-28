@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Auditoria de ciberseguridad - paso 2 (2026-10-28)
+
+- Contencion autorizada: incidencias, analizador y API del agente requieren admin/manager; inventario autentica lecturas y limita escrituras a esos roles. MCP autentica GET de productos.
+- Resolver tickets exige confirmacion booleana estricta y actor; se persisten responsable y fecha. La UI solicita confirmacion; MCP no puede resolver. No se afirma aislamiento por tenant ni prueba criptografica de presencia humana.
+- Validacion: 38 pruebas focalizadas aprobadas, incluida la inyeccion literal del briefing sin fuentes externas. Ruff y ESLint focalizados aprobados (dos warnings anteriores).
+- Typecheck global bloqueado por cinco errores anteriores en SSE/chat/vitest; typecheck estricto del area modificada e imports transitivos aprobado con configuracion temporal.
+- Informe y documentacion MCP actualizados; no se tocaron credenciales ni reglas del entorno compartido.
+
 ## Auditoria de ciberseguridad - paso 1 (2026-10-28)
 
 - Se reprodujo una lectura arbitraria sin autenticacion con canarios temporales: archivo interno y traversal devolvian 200. No se leyeron secretos ni datos reales.

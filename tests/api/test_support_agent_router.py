@@ -10,11 +10,12 @@ import server
 from server import app
 from services.agent.support import SupportAgent, get_support_agent
 from services.api.users.auth import get_current_user
+from services.api.users.models import Role
 
-NORMAL_USER = SimpleNamespace(
+OPERATOR_USER = SimpleNamespace(
     id=1,
     is_active=True,
-    role=SimpleNamespace(value="user"),
+    role=Role.MANAGER,
 )
 
 
@@ -25,7 +26,7 @@ def client(tmp_path, monkeypatch) -> TestClient:
         str(tmp_path / "support-agent.sqlite3"),
     )
     app.dependency_overrides.clear()
-    app.dependency_overrides[get_current_user] = lambda: NORMAL_USER
+    app.dependency_overrides[get_current_user] = lambda: OPERATOR_USER
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -93,7 +94,7 @@ def test_query_returns_answer_and_trace(client: TestClient) -> None:
         assert invoke_args == ("¿Cuál es la tarifa?",)
         assert invoke_kwargs["run_id"] == body["run_id"]
         assert invoke_kwargs["actor_id"] == "1"
-        assert invoke_kwargs["actor_role"] == "user"
+        assert invoke_kwargs["actor_role"] == "manager"
         assert invoke_kwargs["conversation_id"] == body["conversation_id"]
         assert body["conversation_id"]
         trace = client.get(f"/agent/traces/{body['run_id']}")

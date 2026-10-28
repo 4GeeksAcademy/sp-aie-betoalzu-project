@@ -305,6 +305,11 @@ def update_incident(payload: IncidentUpdateInput) -> IncidentOut:
 
 
 def transition_incident(payload: IncidentTransitionInput) -> IncidentOut:
+    if payload.status == IncidentStatus.RESOLVED:
+        raise BackendFailure(
+            "HUMAN_CONFIRMATION_REQUIRED",
+            "Resolve incidents through the human confirmation flow, not MCP.",
+        )
     response = _send(
         "PATCH",
         f"/api/incidents/{payload.incident_id}/status",
@@ -330,7 +335,7 @@ def get_products(query: InventoryGetInput) -> list[AssetResponse]:
         if query.product_id is not None
         else "/inventory/products"
     )
-    response = _send("GET", path)
+    response = _send("GET", path, authenticated=True)
     if response.status_code == 404:
         raise BackendFailure("PRODUCT_NOT_FOUND", "No product matched this ID.", 404)
     if not 200 <= response.status_code < 300:

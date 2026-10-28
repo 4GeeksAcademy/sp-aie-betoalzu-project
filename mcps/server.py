@@ -437,7 +437,8 @@ def create_mcp_server(auth: MCPAuth) -> FastMCP:
         """Cambiar estado mediante PATCH dedicado; requiere incidents:write.
 
         Devuelve la incidencia actualizada; una transición inválida devuelve
-        INVALID_STATUS_TRANSITION.
+        INVALID_STATUS_TRANSITION. Resolver requiere confirmación humana fuera
+        de MCP y devuelve HUMAN_CONFIRMATION_REQUIRED.
         """
         def operation() -> dict[str, Any]:
             incident = transition_incident(IncidentTransitionInput(

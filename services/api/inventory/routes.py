@@ -18,10 +18,10 @@ from services.api.inventory.services import (
     create_exit,
     list_orders,
 )
-from services.api.users.auth import get_current_user
+from services.api.users.auth import get_current_user, get_operations_user
 from services.api.users.models import UserInDB
 
-inventory_api = APIRouter(prefix="/inventory")
+inventory_api = APIRouter(prefix="/inventory", dependencies=[Depends(get_current_user)])
 
 
 def _json_error(message: str, status_code: int):
@@ -40,7 +40,10 @@ def get_products():
 
 
 @inventory_api.post("/products", status_code=201)
-def post_product(payload: AssetCreate):
+def post_product(
+    payload: AssetCreate,
+    current_user: UserInDB = Depends(get_operations_user),
+):
     """Registra un nuevo activo."""
     try:
         return create_asset(payload).model_dump(mode="json")
@@ -58,7 +61,11 @@ def get_product_by_id(product_id: int):
 
 
 @inventory_api.put("/products/{product_id}")
-def put_product(product_id: int, payload: AssetUpdate):
+def put_product(
+    product_id: int,
+    payload: AssetUpdate,
+    current_user: UserInDB = Depends(get_operations_user),
+):
     """Actualiza un activo existente."""
     try:
         result = update_asset(product_id, payload)
@@ -77,7 +84,7 @@ def put_product(product_id: int, payload: AssetUpdate):
 @inventory_api.post("/orders/inbound", status_code=201)
 def post_inbound_order(
     payload: AssetEntryCreate,
-    current_user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_operations_user),
 ):
     """Registra una entrega de activos (AssetEntry).
 
@@ -92,7 +99,7 @@ def post_inbound_order(
 @inventory_api.post("/orders/outbound", status_code=201)
 def post_outbound_order(
     payload: AssetExitCreate,
-    current_user: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_operations_user),
 ):
     """Registra una asignación o consumo (AssetExit).
 

@@ -143,9 +143,15 @@ export default function IncidentsManagerClient() {
   }
 
   async function onTransition(incident: Incident, nextStatus: string) {
+    const confirmResolution = nextStatus === 'resolved';
+    if (confirmResolution && !window.confirm(
+      '¿Confirmas la resolución de esta incidencia? Revisa cualquier queja o dato sensible antes de continuar.',
+    )) return;
     setPageError('');
     try {
-      const updated = await updateIncidentStatus(incident.id, nextStatus as Incident['status']);
+      const updated = await updateIncidentStatus(
+        incident.id, nextStatus as Incident['status'], confirmResolution,
+      );
       setIncidents((prev) => prev.map((i) => (i.id === incident.id ? updated : i)));
       await loadData();
     } catch (err) {

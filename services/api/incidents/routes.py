@@ -42,11 +42,11 @@ from services.api.incidents.services import (
     bulk_insert_incidents,
     clear_all_incidents,
 )
-from services.api.users.auth import get_current_user
+from services.api.users.auth import get_current_user, get_operations_user
 from services.api.users.models import UserInDB
 
 
-incidents_api = APIRouter()
+incidents_api = APIRouter(dependencies=[Depends(get_operations_user)])
 _ROOT_DIR = Path(__file__).resolve().parents[3]
 _CSV_PATH = _ROOT_DIR / "scripts" / "incidents-nexova.csv"
 
@@ -321,7 +321,9 @@ def transition_incident_status(
       resolved/discarded → (terminal, no further transitions)
     """
     try:
-        incident = update_incident_status(incident_id, payload)
+        incident = update_incident_status(
+            incident_id, payload, confirmed_by=str(current_user.id),
+        )
         return incident.model_dump(mode="json")
     except ValueError as exc:
         return _json_error(str(exc), 400)
