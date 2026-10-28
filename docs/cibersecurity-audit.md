@@ -113,3 +113,24 @@ y cliente de autenticacion existente). ESLint, Ruff focalizados, typecheck del
 area y diff check aprobados. El primer intento backend rechazo el dominio
 reservado `.test` del ejemplo; se sustituyo solo el dato sintetico por
 `example.com`, sin llamadas de red, y la repeticion paso.
+
+## Canales secundarios: tokens y notificaciones RFP
+
+SEC-05 (alta, confianza 10/10): el proxy publico de candidatos conservaba
+`Authorization` recibido; el cliente usa ese header para su JWT local.
+Correccion: eliminar Authorization y Cookie con `Headers`, sin depender de
+mayusculas/minusculas, antes de llamar al Playground. Tres pruebas mockeadas
+verifican que ningun token sale de la aplicacion; no se contacto al proveedor.
+El Playground sigue siendo un dataset publico: **no usar datos personales
+reales**. Su autenticacion, retencion y base legal no se certifican.
+
+SEC-06 (media, confianza 10/10): el gestor SSE difundia eventos de creacion
+RFP a cualquier suscriptor autenticado, aunque los tickets REST estan
+restringidos. El payload actual contiene IDs, fecha y estado, pero metadatos
+de cliente aun nulos: no se afirma exposicion de documentos por este canal.
+Correccion: publicar y suscribir por el ID autenticado del propietario;
+se conserva entrega a varias pestanas propias y se excluyen otros usuarios.
+Una prueba offline comprueba dos pestanas propias y una ajena.
+
+Resultado de la regresion de recepcion/aprobacion RFP y SSE: **14 passed**.
+Proxy: **3 passed**; ESLint, Ruff y typecheck estricto del area aprobados.

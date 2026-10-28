@@ -1,5 +1,12 @@
 # Progress — Estado del Proyecto
 
+## Auditoria de ciberseguridad - paso 4 (2026-10-28)
+
+- El proxy de candidatos elimina Authorization y Cookie antes del proveedor publico; tres casos de capitalizacion validados sin red externa.
+- Los eventos SSE RFP se restringen al creador autenticado, preservando varias pestanas propias; otros usuarios ya no reciben IDs y tiempos de creacion ajenos.
+- Se actualizaron contratos SSE y documentacion relacionada. Validacion: 14 pruebas de API RFP/aislamiento y 3 pruebas frontend aprobadas; lint y tipos focalizados correctos.
+- No se afirma privacidad del Playground publico ni aislamiento por cliente del resto de sistemas. Hardening del servidor final pendiente de acceso operativo autorizado.
+
 ## Auditoria de ciberseguridad - paso 3 (2026-10-28)
 
 - POST /login recibe JSON tipado; el proxy Next.js ya no construye URLs con contrasenas. Clientes query-only deben migrar a JSON.

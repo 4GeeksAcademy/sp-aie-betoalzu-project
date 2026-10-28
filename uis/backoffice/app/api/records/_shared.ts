@@ -15,15 +15,16 @@ const RECORDS_API_BASE = 'https://playground.4geeks.com/tracker/api/v1';
  */
 export async function proxyToRecordsBackend(path: string, init?: RequestInit) {
   const url = `${RECORDS_API_BASE}${path}`;
+  const headers = new Headers(init?.headers);
+  headers.delete('authorization');
+  headers.delete('cookie');
+  headers.set('Content-Type', 'application/json');
 
   try {
     const response = await fetch(url, {
       ...init,
       cache: 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(init?.headers || {}),
-      },
+      headers,
     });
 
     const contentType = response.headers.get('content-type') || '';

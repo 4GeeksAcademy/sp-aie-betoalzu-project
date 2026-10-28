@@ -76,7 +76,7 @@ async def test_sse_manager_subscribe_unsubscribe():
     manager = get_sse_manager()
     
     # Subscribe
-    sub_id, queue = await manager.subscribe()
+    sub_id, queue = await manager.subscribe(actor_id="synthetic-owner")
     assert sub_id is not None
     assert queue is not None
     
@@ -90,8 +90,8 @@ async def test_sse_manager_publish():
     manager = get_sse_manager()
     
     # Subscribe two clients
-    sub_id_1, queue_1 = await manager.subscribe()
-    sub_id_2, queue_2 = await manager.subscribe()
+    sub_id_1, queue_1 = await manager.subscribe(actor_id="synthetic-owner")
+    sub_id_2, queue_2 = await manager.subscribe(actor_id="synthetic-owner")
     
     # Publish event
     event_data = {
@@ -103,7 +103,9 @@ async def test_sse_manager_publish():
         "status": "analyzing",
         "created_at": datetime.now(UTC).isoformat(),
     }
-    await manager.publish("rfp_ticket_created", event_data)
+    await manager.publish(
+        "rfp_ticket_created", event_data, actor_id="synthetic-owner",
+    )
     
     # Both subscribers should receive the event
     message_1 = await asyncio.wait_for(queue_1.get(), timeout=2.0)
@@ -122,7 +124,7 @@ async def test_sse_manager_publish():
 async def test_sse_stream_frames():
     """Test SSE stream generates correct frame format."""
     manager = get_sse_manager()
-    sub_id, queue = await manager.subscribe()
+    sub_id, queue = await manager.subscribe(actor_id="synthetic-owner")
     
     # Create test event
     test_data = {"ticket_id": "tkt_001", "status": "analyzing"}
