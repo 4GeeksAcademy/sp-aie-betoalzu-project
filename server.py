@@ -104,19 +104,5 @@ async def serve_dir_directory_index():
             status_code=404,
         )
 
-# Serving any other image
-@app.get('/{path:path}')
-async def serve_any_other_file(path: str):
-    full_path = os.path.join(static_file_dir, path)
-    if not os.path.isfile(full_path):
-        full_path = os.path.join(static_file_dir, path, 'index.html')
-
-    if not os.path.isfile(full_path):
-        return HTMLResponse(content="<h1 align='center'>404</h1>", status_code=404)
-
-    response = FileResponse(full_path)
-    response.headers['Cache-Control'] = 'no-cache'
-    return response
-
 if __name__ == '__main__':
     uvicorn.run(app, host='0.0.0.0', port=8000, reload=True)

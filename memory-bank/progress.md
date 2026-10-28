@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Auditoria de ciberseguridad - paso 1 (2026-10-28)
+
+- Se reprodujo una lectura arbitraria sin autenticacion con canarios temporales: archivo interno y traversal devolvian 200. No se leyeron secretos ni datos reales.
+- Se retiro el catch-all de server.py que publicaba la raiz del proyecto, conservando GET / y los routers de API.
+- Regresion aislada: 7 pruebas aprobadas (privados, traversal, symlink e indice). Ruff E9 y F focalizado y diff check aprobados.
+- Se inicio docs/cibersecurity-audit.md con evidencia antes/despues. El sistema sigue no aprobado; pendientes permisos, confirmacion de cierre, login y evaluacion completa.
+- Actualizacion del banco de memoria autorizada explicitamente; no se modificaron las otras rutas protegidas.
+
 ## Historial completo del proyecto (hitos por rama/commit, cronologico)
 Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, incluyendo hitos previos no documentados anteriormente en el memory bank:
 
