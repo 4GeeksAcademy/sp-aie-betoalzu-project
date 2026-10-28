@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Auditoria de ciberseguridad - paso 5 (2026-10-28)
+
+- Informe completo en docs/cibersecurity-audit.md: NIST AI RMF 1.0/GenAI Profile, inventario de cuatro sistemas con responsables funcionales, RGPD/FIPA/FCRA, 30 evaluaciones OWASP 2021, acciones irreversibles, evidencias locales y residuales.
+- Verificacion final focalizada: 78 pruebas backend y 27 frontend aprobadas; se ajusto un fixture antiguo sin rol a manager, manteniendo el control de acceso.
+- Se reprodujo el comando exacto del canario previo usando codigo versionado y temporales; enlaces locales y cardinalidad de matriz OWASP validados. Critico corregido en 53a8d5f; permisos/cierre en 2948e8e; login en a3b7b39; SSE/tokens en e1f33e6.
+- Sin sign-off: tenancy pendiente, root SSH permitido en configuracion base local (efectividad no verificada), firewall sin permisos de lectura, servidor final no accesible y errores previos de chat/typecheck global. No se declaro cumplimiento legal ni endurecimiento productivo.
+- Se documentaron limites de contenido excluido y se actualizaron decisiones autorizadas en CONTEXT.md. No se modificaron secretos, lockfiles protegidos ni configuracion del host compartido.
+
 ## Auditoria de ciberseguridad - paso 4 (2026-10-28)
 
 - El proxy de candidatos elimina Authorization y Cookie antes del proveedor publico; tres casos de capitalizacion validados sin red externa.

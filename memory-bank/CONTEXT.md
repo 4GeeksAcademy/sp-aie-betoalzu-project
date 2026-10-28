@@ -75,3 +75,10 @@ Su objetivo es alinear el desarrollo tecnico con la realidad de la empresa, deja
 
 - Cuando Docker bridge carece de conectividad DNS y el host si puede acceder al proveedor, usar `docker compose -f docker-compose.yml -f docker-compose.codespaces.yml up -d backend qdrant`. La variante es opcional y esta destinada a Codespaces/Linux; el backend utiliza red de host y Qdrant mediante su puerto publicado local.
 - Las llamadas HTTP directas al proveedor generativo deben enviar el identificador exacto autorizado, sin el prefijo de cliente `litellm/`. La variante configura el mismo modelo DeepSeek seleccionado; las claves permanecen en la configuracion local y fuera del commit.
+
+## Contencion de seguridad autorizada (2026-10-28)
+
+- Incidencias, analizador y API del agente requieren rol admin/manager. Inventario exige autenticacion para lecturas y rol operativo para escrituras. Es una contencion, no aislamiento entre clientes.
+- Resolver incidencias requiere confirmacion explicita en UI/API y deja actor/fecha; MCP no puede resolver. No equivale a prueba criptografica de presencia humana.
+- Login usa JSON, no query. El proxy publico de candidatos elimina credenciales locales y SSE RFP entrega eventos solo al creador autenticado.
+- La auditoria local esta en docs/cibersecurity-audit.md. El sign-off sigue bloqueado por tenancy, verificaciones legales y del servidor final y bloqueos preexistentes de integracion/tipos; no habilitar capacidades de IA ausentes ni PII real en Playground como si estuvieran aprobadas.
