@@ -107,3 +107,54 @@ Index(
     TelemetryEventRecord.tags,
     postgresql_using="gin",
 )
+
+
+# ---------------------------------------------------------------------------
+# ChatSession — Sesión de chat en tiempo real (WebSocket)
+# ---------------------------------------------------------------------------
+
+
+class ChatSession(SQLModel, table=True):
+    """Sesión de chat bidireccional con agente de soporte.
+    
+    Vinculación WebSocket: el session_id es el identificador único
+    para todas las suscripciones pub/sub durante la sesión.
+    """
+
+    __tablename__ = "chat_sessions"  # type: ignore[misc]
+
+    session_id: str = Field(primary_key=True, max_length=100)
+    agent_id: str = Field(max_length=100, default="first_line_support")
+    user_id: str = Field(index=True, max_length=100)
+    client_id: str = Field(index=True, max_length=100)
+    status: str = Field(default="active")  # "active" | "interrupted" | "closed"
+    thread_id: str = Field(max_length=100)  # LangGraph thread_id (= session_id si usas checkpoint)
+    checkpoint_id: str | None = Field(default=None, max_length=255)  # Último checkpoint del grafo
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column_kwargs={"onupdate": lambda: datetime.now(timezone.utc)},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Message — Historial del Chat
+# ---------------------------------------------------------------------------
+
+
+class Message(SQLModel, table=True):
+    """Mensaje individual en una sesión de chat.
+    
+    Los tokens se acumulan en memoria durante la generación y se persisten
+    completos tras generation_completed o generation_interrupted.
+    """
+
+    __tablename__ = "chat_messages"  # type: ignore[misc]
+
+    message_id: str = Field(primary_key=True, max_length=100)
+    session_id: str = Field(foreign_key="chat_sessions.session_id", index=True, max_length=100)
+    sender: str = Field(max_length=20)  # "user" | "assistant"
+    text: str  # Contenido vacío si status="interrupted" y sin tokens aún
+    tokens_received: int = Field(default=0)  # Cantidad de tokens entregados (para status="interrupted")
+    status: str = Field(default="pending")  # "completed" | "interrupted" | "pending"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)

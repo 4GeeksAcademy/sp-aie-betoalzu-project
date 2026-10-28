@@ -29,6 +29,7 @@ from services.api.rfp_intake.routes import (
     recover_interrupted_rfp_intake,
     rfp_intake_api,
 )
+from services.api.chat.routes import chat_api
 from services.reporting.routes import reporting_api
 from services.agent.routes import agent_api
 from services.agent.support import (
@@ -81,6 +82,7 @@ app.include_router(knowledge_api)
 app.include_router(rfp_intake_api)
 app.include_router(reporting_api)
 app.include_router(agent_api)
+app.include_router(chat_api)
 
 # Serving the index file
 @app.get('/')
