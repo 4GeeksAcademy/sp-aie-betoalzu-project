@@ -1,5 +1,12 @@
 # Progress — Estado del Proyecto
 
+## Auditoria de ciberseguridad - paso 3 (2026-10-28)
+
+- POST /login recibe JSON tipado; el proxy Next.js ya no construye URLs con contrasenas. Clientes query-only deben migrar a JSON.
+- Se conservan 401 para credenciales invalidas y 403 para usuarios inactivos. Pruebas del proxy comprueban que no se envian credenciales en la URL.
+- Validacion: 5 pruebas backend y 24 pruebas frontend aprobadas; lint y typecheck estricto del area aprobados.
+- El primer intento backend uso un dominio sintetico reservado que EmailStr rechaza; se corrigio unicamente el ejemplo y la repeticion paso. No se modificaron datos ni configuracion reales.
+
 ## Auditoria de ciberseguridad - paso 2 (2026-10-28)
 
 - Contencion autorizada: incidencias, analizador y API del agente requieren admin/manager; inventario autentica lecturas y limita escrituras a esos roles. MCP autentica GET de productos.

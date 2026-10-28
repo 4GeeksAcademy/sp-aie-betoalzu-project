@@ -90,3 +90,26 @@ y `services/rfp-sse.ts` (reader posiblemente undefined). No se corrigieron
 fuera de alcance. Un tsconfig temporal que extiende el original, limita
 `include` a los archivos afectados y conserva `strict` verifica sus imports
 transitivos correctamente. No se afirma que el build global pase.
+
+## Credenciales de login
+
+Antes: la ruta Next.js serializaba email/password con `URLSearchParams` en
+`POST /login?...`, y FastAPI esperaba parametros query. Una peticion POST
+no oculta una query de los access logs, proxies o herramientas de observacion.
+Despues: `POST /login` requiere `LoginRequest` en JSON y el proxy envia
+ese cuerpo, nunca credenciales en la URL. Los clientes directos deben migrar
+a JSON; no se mantiene fallback query por seguridad. El cuerpo sigue
+requiriendo TLS y redaccion de logs en el despliegue.
+
+```sh
+PYTHON_DOTENV_DISABLED=1 SECRET_KEY=synthetic-audit-only \
+  python -m pytest tests/security/test_login_transport.py -q
+cd uis/backoffice
+npm exec --no -- jest --runInBand __tests__/api/login-route.test.ts
+```
+
+Resultado: **5 passed** backend; **24 passed** en dos suites Jest (proxy nuevo
+y cliente de autenticacion existente). ESLint, Ruff focalizados, typecheck del
+area y diff check aprobados. El primer intento backend rechazo el dominio
+reservado `.test` del ejemplo; se sustituyo solo el dato sintetico por
+`example.com`, sin llamadas de red, y la repeticion paso.

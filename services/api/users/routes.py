@@ -25,6 +25,7 @@ from services.api.users.auth import (
 from services.api.users.models import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
+    LoginRequest,
     Profile,
     ResetPasswordRequest,
     Role,
@@ -59,10 +60,10 @@ def _json_error(message: str, status_code: int):
 
 
 @users_api.post("/login")
-def login(email: str, password: str):
+def login(payload: LoginRequest):
     """Authenticate a user and return a JWT access token."""
-    user = get_user_by_email(email)
-    if user is None or not verify_password(password, user.hashed_password):
+    user = get_user_by_email(payload.email)
+    if user is None or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",

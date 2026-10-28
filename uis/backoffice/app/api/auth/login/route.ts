@@ -2,7 +2,7 @@ import { proxyAuthRequest } from '../_shared';
 
 /**
  * POST /api/auth/login
- * Accepts JSON body { email, password } and proxies to POST /login?email=...&password=...
+ * Accepts JSON body { email, password } and proxies JSON to POST /login.
  * on the Python backend.
  */
 export async function POST(request: Request) {
@@ -10,15 +10,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { email, password } = body;
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
       return new Response(
         JSON.stringify({ error: 'Email y contrasena son obligatorios.' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       );
     }
 
-    const params = new URLSearchParams({ email, password });
-    return proxyAuthRequest(`/login?${params.toString()}`, { method: 'POST' });
+    return proxyAuthRequest('/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
   } catch {
     return new Response(
       JSON.stringify({ error: 'Cuerpo de peticion invalido.' }),
