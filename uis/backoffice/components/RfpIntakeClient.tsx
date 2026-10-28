@@ -2,10 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import {
+  decideRfpApproval,
+  downloadFinalRfpDocument,
+  generateRfpResponses,
   getRfpTicket,
   listRfpTickets,
   retryRfpTicket,
+  resumeRfpApprovalRevision,
+  startRfpApprovals,
   uploadRfp,
+  type RfpApprovalAction,
 } from '@/services/rfp-intake';
 import type {
   RfpMetadata,
@@ -19,6 +25,17 @@ const STATUS_LABELS: Record<RfpTicketSummary['status'], string> = {
   analizando: 'Analizando',
   descartado: 'Descartado',
   analisis_completo: 'Análisis completo',
+  generando_borrador: 'Generando secciones',
+  'en-evaluación': 'Evaluando secciones',
+  needs_human_review: 'Requiere revisión humana',
+  'esperando_aprobación': 'Esperando aprobación',
+  terminado: 'Terminado',
+};
+
+const APPROVER_NAMES: Record<string, string> = {
+  seleccion: 'Javier Almeida',
+  capacitacion: 'Elena Vargas',
+  soporte: 'Roberto Díaz',
 };
 
 function display(value: string | null | undefined): string {
@@ -77,7 +94,29 @@ function MetadataCard({ metadata }: { metadata: RfpMetadata }) {
   );
 }
 
-function TicketResult({ ticket }: { ticket: RfpTicketDetail }) {
+type TicketResultProps = {
+  ticket: RfpTicketDetail;
+  busy: boolean;
+  comments: Record<string, string>;
+  onGenerate: () => void;
+  onStartApprovals: () => void;
+  onResumeApproval: (departmentId: string) => void;
+  onCommentChange: (departmentId: string, value: string) => void;
+  onDecision: (departmentId: string, action: RfpApprovalAction) => void;
+  onDownload: () => void;
+};
+
+function TicketResult({
+  ticket,
+  busy,
+  comments,
+  onGenerate,
+  onStartApprovals,
+  onResumeApproval,
+  onCommentChange,
+  onDecision,
+  onDownload,
+}: TicketResultProps) {
   if (ticket.status === 'descartado') {
     return (
       <section className="rounded-xl border border-amber-200 bg-amber-50 p-5">
@@ -92,18 +131,81 @@ function TicketResult({ ticket }: { ticket: RfpTicketDetail }) {
     );
   }
 
-  if (ticket.status !== 'analisis_completo' || !ticket.metadata) return null;
+  if (!ticket.metadata) return null;
 
   return (
     <>
       <MetadataCard metadata={ticket.metadata} />
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div>
-          <h3 className="text-lg font-bold text-slate-900">Aspectos por departamento</h3>
+          <h3 className="text-lg font-bold text-slate-900">
+            {ticket.status === 'analisis_completo'
+              ? 'Aspectos por departamento'
+              : 'Secciones de propuesta'}
+          </h3>
           <p className="mt-1 text-sm text-slate-600">
-            Solo aparecen los equipos activados por servicios respaldados en el documento.
+            Solo aparecen los departamentos activos en el handoff de esta RFP.
           </p>
         </div>
+        {ticket.status === 'analisis_completo' && ticket.can_generate && (
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={busy}
+            className="mt-4 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {busy ? 'Iniciando...' : 'Generar secciones de propuesta'}
+          </button>
+        )}
+        {ticket.status === 'en-evaluación' && ticket.processing && (
+          <p role="status" className="mt-4 text-sm text-slate-600">
+            Las secciones están en evaluación.
+          </p>
+        )}
+        {['en-evaluación', 'needs_human_review'].includes(ticket.status) &&
+          !ticket.processing && (
+            <button
+              type="button"
+              onClick={onStartApprovals}
+              disabled={busy}
+              className="mt-4 rounded-full bg-brand px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {busy ? 'Preparando...' : 'Iniciar revisión y aprobaciones'}
+            </button>
+          )}
+        {ticket.status === 'generando_borrador' && (
+          <p role="status" className="mt-4 text-sm text-slate-600">
+            Se están generando o revisando las secciones.
+          </p>
+        )}
+        {ticket.status === 'esperando_aprobación' && (
+          <p role="status" className="mt-4 text-sm text-slate-600">
+            Las decisiones son independientes por departamento. La espera de un equipo no bloquea a los demás.
+          </p>
+        )}
+        {ticket.arbitrations.length > 0 && (
+          <section className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <h4 className="font-semibold text-amber-900">Historial de arbitraje</h4>
+            <ul className="mt-2 space-y-2 text-sm text-amber-900">
+              {ticket.arbitrations.map((item) => (
+                <li key={`${item.trigger_id}-${item.created_at}`}>
+                  <strong>{item.trigger_id}</strong> · árbitro: {item.arbitrator} ·{' '}
+                  {item.result}. {item.rule}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {ticket.status === 'terminado' && ticket.final_document && (
+          <button
+            type="button"
+            onClick={onDownload}
+            disabled={busy}
+            className="mt-4 rounded-full bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+          >
+            Descargar documento final (JSON)
+          </button>
+        )}
         <div className="mt-4 space-y-4">
           {ticket.sections.length === 0 ? (
             <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
@@ -124,10 +226,54 @@ function TicketResult({ ticket }: { ticket: RfpTicketDetail }) {
                       {section.department_id}
                     </h4>
                     <span className="text-sm text-slate-600">
-                      Contactar a {workstream?.contact ?? 'responsable del departamento'}
+                      {ticket.status === 'analisis_completo'
+                        ? `Responsable: ${workstream?.contact ?? APPROVER_NAMES[section.department_id] ?? 'No asignado'}`
+                        : `Responsable: ${APPROVER_NAMES[section.department_id] ?? 'No asignado'} · Decisión por admin`}
                     </span>
                   </div>
-                  {section.key_aspects.length > 0 ? (
+                  {ticket.status !== 'analisis_completo' && section.draft_content && (
+                    <div className="mt-3 rounded-lg bg-slate-50 p-4">
+                      <h5 className="text-sm font-semibold text-slate-800">Borrador vigente</h5>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                        {section.draft_content}
+                      </p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Versión {section.evaluation_results?.iteration_count ?? '—'} ·{' '}
+                        {section.evaluation_results?.section_status ?? 'estado no disponible'}
+                      </p>
+                      {section.evaluation_results?.result && (
+                        <div className="mt-3 border-t border-slate-200 pt-3 text-sm">
+                          <p className="font-semibold text-slate-800">
+                            Evaluación automática:{' '}
+                            {section.evaluation_results.result.overall_pass
+                              ? 'aprobada'
+                              : 'requiere revisión'}
+                          </p>
+                          <p className="mt-1 text-slate-600">
+                            Legibilidad:{' '}
+                            {section.evaluation_results.result.readability?.details ?? 'sin detalle'}
+                          </p>
+                          {(section.evaluation_results.result.relevance?.missing_aspects?.length ?? 0) > 0 && (
+                            <p className="mt-1 text-amber-800">
+                              Aspectos omitidos:{' '}
+                              {section.evaluation_results.result.relevance?.missing_aspects?.join('; ')}
+                            </p>
+                          )}
+                          {(section.evaluation_results.result.compliance?.violations?.length ?? 0) > 0 && (
+                            <ul className="mt-1 list-disc pl-5 text-amber-800">
+                              {section.evaluation_results.result.compliance?.violations?.map((violation) => (
+                                <li key={violation}>{violation}</li>
+                              ))}
+                            </ul>
+                          )}
+                          <p className="mt-1 text-slate-600">
+                            {section.evaluation_results.result.feedback_for_generator}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {ticket.status === 'analisis_completo' && section.key_aspects.length > 0 ? (
                     <ul className="mt-3 space-y-3">
                       {section.key_aspects.map((aspect, index) => (
                         <li key={`${aspect.aspect}-${index}`} className="text-sm text-slate-700">
@@ -146,11 +292,88 @@ function TicketResult({ ticket }: { ticket: RfpTicketDetail }) {
                         </li>
                       ))}
                     </ul>
-                  ) : (
+                  ) : ticket.status === 'analisis_completo' ? (
                     <p className="mt-3 text-sm text-slate-600">
                       No hay aspectos concretos; revisar las preguntas abiertas.
                     </p>
+                  ) : (
+                    <div className="mt-3 text-sm text-slate-600">
+                      <p>
+                        Estado de aprobación:{' '}
+                        {ticket.approval_branches.find(
+                          (branch) => branch.department_id === section.department_id,
+                        )?.status ?? section.approval_status}
+                      </p>
+                      {ticket.approval_decisions
+                        .filter((decision) => decision.department_id === section.department_id)
+                        .slice(-1)
+                        .map((decision) => (
+                          <p key={decision.created_at} className="mt-1">
+                            Última decisión: {decision.action} · {decision.approver_email}
+                            {decision.comment ? ` · ${decision.comment}` : ''}
+                          </p>
+                        ))}
+                    </div>
                   )}
+                  {ticket.status === 'esperando_aprobación' &&
+                    ticket.can_approve &&
+                    ticket.approval_branches.find(
+                      (branch) => branch.department_id === section.department_id,
+                    )?.status === 'pending' && (
+                      <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                        <label className="block text-sm font-medium text-slate-700">
+                          Comentario (obligatorio para rechazo o solicitud de cambios)
+                          <textarea
+                            value={comments[section.department_id] ?? ''}
+                            onChange={(event) =>
+                              onCommentChange(section.department_id, event.target.value)
+                            }
+                            rows={3}
+                            className="mt-1 block w-full rounded-lg border border-slate-300 p-2 text-sm"
+                          />
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onDecision(section.department_id, 'approve')}
+                            disabled={busy}
+                            className="rounded-full bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                          >
+                            Aprobar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDecision(section.department_id, 'request_changes')}
+                            disabled={busy || !(comments[section.department_id] ?? '').trim()}
+                            className="rounded-full bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                          >
+                            Solicitar cambios
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDecision(section.department_id, 'reject')}
+                            disabled={busy || !(comments[section.department_id] ?? '').trim()}
+                            className="rounded-full bg-red-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                          >
+                            Rechazar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  {ticket.status === 'needs_human_review' &&
+                    ticket.can_approve &&
+                    ticket.approval_branches.find(
+                      (branch) => branch.department_id === section.department_id,
+                    )?.status === 'revision_requested' && (
+                      <button
+                        type="button"
+                        onClick={() => onResumeApproval(section.department_id)}
+                        disabled={busy}
+                        className="mt-4 rounded-full bg-amber-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        {busy ? 'Reanudando...' : 'Reanudar revisión de sección'}
+                      </button>
+                    )}
                 </article>
               );
             })
@@ -179,6 +402,8 @@ export default function RfpIntakeClient() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [comments, setComments] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -225,8 +450,14 @@ export default function RfpIntakeClient() {
         setTickets((current) =>
           current.map((item) => (item.ticket_id === detail.ticket_id ? detail : item)),
         );
-        if (detail.status === 'analizando' && !detail.processing_error) {
-          timeout = setTimeout(() => void poll(), 3000);
+        if (
+          (detail.processing && !detail.processing_error) ||
+          detail.status === 'esperando_aprobación'
+        ) {
+          timeout = setTimeout(
+            () => void poll(),
+            detail.processing ? 3000 : 15000,
+          );
         }
       } catch (requestError: unknown) {
         if (!active) return;
@@ -274,7 +505,13 @@ export default function RfpIntakeClient() {
       setTickets((current) =>
         current.map((item) =>
           item.ticket_id === selectedTicketId
-            ? { ...item, status: 'analizando', retry_available: false, processing_error: null }
+            ? {
+                ...item,
+                status: 'analizando',
+                processing: true,
+                retry_available: false,
+                processing_error: null,
+              }
             : item,
         ),
       );
@@ -287,6 +524,79 @@ export default function RfpIntakeClient() {
     } finally {
       setRetrying(false);
     }
+  };
+
+  const refreshSelectedTicket = async () => {
+    if (!selectedTicketId) return;
+    const refreshed = await getRfpTicket(selectedTicketId);
+    setTicket(refreshed);
+    setTickets((current) =>
+      current.map((item) => (item.ticket_id === refreshed.ticket_id ? refreshed : item)),
+    );
+  };
+
+  const runWorkflowAction = async (action: () => Promise<unknown>) => {
+    setError('');
+    setWorkflowBusy(true);
+    try {
+      await action();
+      await refreshSelectedTicket();
+    } catch (requestError: unknown) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'No se pudo completar la acción del flujo RFP.',
+      );
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const handleDecision = async (
+    departmentId: string,
+    action: RfpApprovalAction,
+  ) => {
+    if (!selectedTicketId || !ticket) return;
+    const section = ticket.sections.find(
+      (item) => item.department_id === departmentId,
+    );
+    const evaluation = section?.evaluation_results;
+    const digest = evaluation?.result?.draft_sha256;
+    const version = evaluation?.iteration_count;
+    if (!digest || !version) {
+      setError('La sección no tiene una versión de borrador aprobable.');
+      return;
+    }
+    const comment = comments[departmentId]?.trim();
+    await runWorkflowAction(async () => {
+      await decideRfpApproval(selectedTicketId, departmentId, {
+        action,
+        draft_sha256: digest,
+        draft_version: version,
+        ...(comment ? { comment } : {}),
+      });
+      setComments((current) => ({ ...current, [departmentId]: '' }));
+    });
+  };
+
+  const handleResumeApproval = (departmentId: string) => {
+    if (!selectedTicketId) return;
+    void runWorkflowAction(() =>
+      resumeRfpApprovalRevision(selectedTicketId, departmentId),
+    );
+  };
+
+  const handleDownload = async () => {
+    if (!selectedTicketId) return;
+    await runWorkflowAction(async () => {
+      const blob = await downloadFinalRfpDocument(selectedTicketId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `rfp-${selectedTicketId}-final.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    });
   };
 
   return (
@@ -406,7 +716,32 @@ export default function RfpIntakeClient() {
                   </div>
                 )}
               </header>
-              <TicketResult ticket={ticket} />
+              <TicketResult
+                ticket={ticket}
+                busy={workflowBusy}
+                comments={comments}
+                onGenerate={() =>
+                  void runWorkflowAction(() =>
+                    generateRfpResponses(ticket.ticket_id),
+                  )
+                }
+                onStartApprovals={() =>
+                  void runWorkflowAction(() =>
+                    startRfpApprovals(ticket.ticket_id),
+                  )
+                }
+                onResumeApproval={handleResumeApproval}
+                onCommentChange={(departmentId, value) =>
+                  setComments((current) => ({
+                    ...current,
+                    [departmentId]: value,
+                  }))
+                }
+                onDecision={(departmentId, action) =>
+                  void handleDecision(departmentId, action)
+                }
+                onDownload={() => void handleDownload()}
+              />
             </>
           ) : selectedTicketId ? (
             <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">

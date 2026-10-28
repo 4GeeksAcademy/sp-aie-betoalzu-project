@@ -227,3 +227,11 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 
 - El fan-out por departamento ahora es parte del grafo LangGraph de RFP mediante `Send`, seguido por el ensamblado del handoff; se mantiene la evaluación paralela por sección. Se reforzó la prueba offline para comprobar ejecución concurrente de generadores sin LLM.
 - Se actualizó la documentación de Parte 2. Validación final focalizada de API, generación e intake: `23 passed`; Ruff y `git diff --check` correctos.
+
+## Aprobación y cierre de RFP
+
+- Se implementó la Parte 3 según `docs/briefing-rft-intake.md`: ramas persistentes e independientes por departamento, decisiones idempotentes con auditoría, validación de borrador/digest/versión, solicitudes de cambio y reanudación explícita de revisiones interrumpidas.
+- Un usuario con rol global `admin` puede aprobar todas las secciones activas, conforme a la autorización del usuario. El alta pública siempre crea usuarios `user`; el bootstrap del primer admin requiere `ADMIN_BOOTSTRAP_TOKEN` y queda protegido frente a concurrencia y reuso.
+- Se aplican triggers estructurados de SLA de Soporte y moneda; el arbitraje registra evidencia, responsable y resultado, y puede reabrir la sección para revisión.
+- Tras la aprobación de todas las ramas se persiste un documento final JSON (`ticket_id`, `sections`, `currency`, `generated_at` y digests) antes de terminar el ticket. La descarga está protegida y disponible en el backoffice.
+- Validación focalizada: `30 passed` en las suites RFP y bootstrap; TypeScript, ESLint focalizado, Ruff focalizado y `git diff --check` correctos. Los documentos de requisitos adjuntos permanecen intactos.

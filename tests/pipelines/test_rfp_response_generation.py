@@ -101,6 +101,44 @@ def test_generators_receive_only_their_department_aspects(monkeypatch):
     )
 
 
+def test_revision_reuses_part_two_handoff_and_only_regenerates_target_department(
+    monkeypatch,
+):
+    calls = _install_agents(monkeypatch)
+    initial = responses.generate_rfp_responses("ticket-1", _handoff())
+    existing_sections = {}
+    for section in initial["sections"]:
+        evaluation = section["evaluation_results"]
+        if section["department_id"] == "seleccion":
+            evaluation["section_status"] = "needs_revision"
+            evaluation["result"]["feedback_for_generator"] = (
+                "Feedback del revisor: aclarar el alcance."
+            )
+        existing_sections[section["department_id"]] = {
+            "draft_content": section["draft_content"],
+            "evaluation_results": evaluation,
+        }
+    calls.clear()
+
+    revised = responses.generate_rfp_responses(
+        "ticket-1",
+        initial["handoff"],
+        existing_sections=existing_sections,
+    )
+
+    generated_departments = [
+        name.removeprefix("generator_")
+        for name, _ in calls
+        if name.startswith("generator_")
+    ]
+    iterations = {
+        item["department_id"]: item["iteration_count"]
+        for item in revised["sections"]
+    }
+    assert generated_departments == ["seleccion"]
+    assert iterations == {"seleccion": 2, "soporte": 1}
+
+
 def test_evaluators_run_in_parallel_and_combine_structured_results(monkeypatch):
     barrier = threading.Barrier(3)
 

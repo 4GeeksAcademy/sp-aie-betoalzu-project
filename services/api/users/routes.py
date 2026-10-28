@@ -1,15 +1,23 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
+import hmac
 import logging
 import os
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from services.api.users.auth import (
     create_access_token,
+    get_admin_user,
     get_current_user,
     hash_password,
     verify_password,
@@ -17,25 +25,28 @@ from services.api.users.auth import (
 from services.api.users.models import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
+    Profile,
     ResetPasswordRequest,
+    Role,
     UserCreate,
-    UserUpdate,
     UserInDB,
+    UserUpdate,
 )
 from services.api.users.services import (
     create_user,
     delete_user,
-    get_user_by_id,
-    list_users,
-    update_user,
     get_user_by_email,
-    store_reset_token,
-    validate_reset_token,
+    get_user_by_id,
     invalidate_reset_token,
+    list_users,
+    store_reset_token,
+    update_user,
     update_user_password,
+    validate_reset_token,
 )
 
 users_api = APIRouter()
+ADMIN_USER = Depends(get_admin_user)
 
 
 def _json_error(message: str, status_code: int):
@@ -89,6 +100,41 @@ FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@nexova.com")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 logger = logging.getLogger(__name__)
+ADMIN_BOOTSTRAP_TOKEN = os.getenv("ADMIN_BOOTSTRAP_TOKEN")
+ADMIN_BOOTSTRAP_LOCK = (
+    Path(__file__).resolve().parents[3]
+    / "data_project"
+    / "admin-bootstrap.lock"
+)
+_ADMIN_BOOTSTRAP_LOCK = threading.Lock()
+
+
+class AdminBootstrapRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1)
+    email: EmailStr
+    password: str = Field(min_length=6)
+    profile: Profile | None = None
+
+
+@contextmanager
+def _exclusive_admin_bootstrap() -> Iterator[None]:
+    ADMIN_BOOTSTRAP_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(
+        ADMIN_BOOTSTRAP_LOCK,
+        os.O_CREAT | os.O_RDWR,
+        0o600,
+    )
+    try:
+        with _ADMIN_BOOTSTRAP_LOCK:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
 
 
 def _send_reset_email(to_email: str, token: str) -> None:
@@ -251,6 +297,53 @@ def register_user(payload: UserCreate):
     Hashes the password before saving. Accepts optional profile fields
     (name, phone, address) and creates the linked Profile in the same operation.
     """
+    try:
+        result = create_user(payload.model_copy(update={"role": Role.USER}))
+        return result.model_dump(mode="json")
+    except ValueError as exc:
+        return _json_error(str(exc), 409)
+
+
+@users_api.post("/auth/bootstrap-admin", status_code=201)
+def bootstrap_admin(payload: AdminBootstrapRequest):
+    if not ADMIN_BOOTSTRAP_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El bootstrap de administrador no está habilitado.",
+        )
+    if not hmac.compare_digest(payload.token, ADMIN_BOOTSTRAP_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de bootstrap inválido.",
+        )
+
+    with _exclusive_admin_bootstrap():
+        if any(user.role == Role.ADMIN for user in list_users()):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Ya existe un administrador; el bootstrap es de un solo uso.",
+            )
+        try:
+            result = create_user(
+                UserCreate(
+                    email=payload.email,
+                    password=payload.password,
+                    role=Role.ADMIN,
+                    profile=payload.profile,
+                )
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+            ) from exc
+    return result.model_dump(mode="json")
+
+
+@users_api.post("/users/admin", status_code=201)
+def create_user_as_admin(
+    payload: UserCreate,
+    current_user: UserInDB = ADMIN_USER,
+):
     try:
         result = create_user(payload)
         return result.model_dump(mode="json")

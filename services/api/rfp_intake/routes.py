@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import threading
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import (
@@ -17,15 +20,30 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel, Field
-from sqlalchemy.exc import SQLAlchemyError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
 
+from data_project.pipelines.rfp_intake.approval import (
+    RfpApprovalError,
+    authorized_departments,
+    detect_structured_conflicts,
+    draft_digest,
+    validate_approval_handoff,
+)
 from data_project.pipelines.rfp_intake.graph import RfpIntakeError
-from data_project.pipelines.rfp_intake.responses import generate_rfp_responses
+from data_project.pipelines.rfp_intake.responses import (
+    MAX_GENERATION_ATTEMPTS,
+    generate_rfp_responses,
+)
 from services import database
 from services.api.rfp_intake.models import (
+    RfpApprovalBranch,
+    RfpApprovalDecision,
+    RfpArbitrationRecord,
     RfpDepartmentSection,
+    RfpFinalDocument,
     RfpHandoff,
     RfpMetadataRecord,
     RfpTicket,
@@ -53,6 +71,7 @@ class TicketSummary(BaseModel):
     processing_error: str | None
     retry_count: int
     retry_available: bool
+    processing: bool
     created_at: datetime
     updated_at: datetime
 
@@ -62,6 +81,29 @@ class TicketDetail(TicketSummary):
     metadata: dict[str, Any] | None = None
     sections: list[dict[str, Any]] = Field(default_factory=list)
     handoff: dict[str, Any] | None = None
+    approval_branches: list[dict[str, Any]] = Field(default_factory=list)
+    approval_decisions: list[dict[str, Any]] = Field(default_factory=list)
+    arbitrations: list[dict[str, Any]] = Field(default_factory=list)
+    final_document: dict[str, Any] | None = None
+    can_approve: bool = False
+    can_generate: bool = False
+
+
+class ApprovalDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["approve", "reject", "request_changes"]
+    draft_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    draft_version: int = Field(ge=1)
+    comment: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def require_feedback(self) -> ApprovalDecisionRequest:
+        if self.action in {"reject", "request_changes"} and not (
+            self.comment and self.comment.strip()
+        ):
+            raise ValueError("Se requiere un comentario para rechazar o pedir cambios.")
+        return self
 
 
 def _owned_ticket(
@@ -74,6 +116,34 @@ def _owned_ticket(
         session.add(ticket)
         session.commit()
     return ticket
+
+
+def _visible_ticket(
+    session: Session, ticket_id: str, current_user: UserInDB
+) -> RfpTicket:
+    ticket = session.get(RfpTicket, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+    if _mark_if_stale(ticket):
+        session.add(ticket)
+        session.commit()
+    if ticket.created_by == str(current_user.id):
+        return ticket
+    departments = authorized_departments(current_user)
+    if departments:
+        handoff = session.get(RfpHandoff, ticket_id)
+        workstreams = (
+            handoff.payload.get("active_workstreams", [])
+            if handoff and isinstance(handoff.payload, dict)
+            else []
+        )
+        if any(
+            isinstance(item, dict)
+            and item.get("department_id") in departments
+            for item in workstreams
+        ):
+            return ticket
+    raise HTTPException(status_code=404, detail="Ticket no encontrado.")
 
 
 def _mark_if_stale(ticket: RfpTicket) -> bool:
@@ -112,12 +182,15 @@ def _summary(ticket: RfpTicket) -> TicketSummary:
         processing_error=ticket.processing_error,
         retry_count=ticket.retry_count,
         retry_available=_can_retry(ticket),
+        processing=ticket.processing_started_at is not None,
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
     )
 
 
-def _detail(session: Session, ticket: RfpTicket) -> TicketDetail:
+def _detail(
+    session: Session, ticket: RfpTicket, current_user: UserInDB
+) -> TicketDetail:
     metadata = session.get(RfpMetadataRecord, ticket.ticket_id)
     handoff = session.get(RfpHandoff, ticket.ticket_id)
     sections = session.exec(
@@ -125,12 +198,42 @@ def _detail(session: Session, ticket: RfpTicket) -> TicketDetail:
             RfpDepartmentSection.ticket_id == ticket.ticket_id
         )
     ).all()
+    branches = session.exec(
+        select(RfpApprovalBranch).where(
+            RfpApprovalBranch.ticket_id == ticket.ticket_id
+        )
+    ).all()
+    decisions = session.exec(
+        select(RfpApprovalDecision)
+        .where(RfpApprovalDecision.ticket_id == ticket.ticket_id)
+        .order_by(RfpApprovalDecision.created_at)
+    ).all()
+    arbitrations = session.exec(
+        select(RfpArbitrationRecord)
+        .where(RfpArbitrationRecord.ticket_id == ticket.ticket_id)
+        .order_by(RfpArbitrationRecord.created_at)
+    ).all()
+    final_document = session.get(RfpFinalDocument, ticket.ticket_id)
     return TicketDetail(
         **_summary(ticket).model_dump(),
         classification=ticket.classification_result,
         metadata=metadata.model_dump(mode="json") if metadata else None,
         sections=[section.model_dump(mode="json") for section in sections],
         handoff=handoff.payload if handoff else None,
+        approval_branches=[branch.model_dump(mode="json") for branch in branches],
+        approval_decisions=[
+            decision.model_dump(
+                mode="json",
+                exclude={"draft_snapshot", "evaluation_snapshot", "idempotency_key"},
+            )
+            for decision in decisions
+        ],
+        arbitrations=[item.model_dump(mode="json") for item in arbitrations],
+        final_document=(
+            final_document.model_dump(mode="json") if final_document else None
+        ),
+        can_approve=bool(authorized_departments(current_user)),
+        can_generate=ticket.created_by == str(current_user.id),
     )
 
 
@@ -390,7 +493,9 @@ def _persist_response_evaluation(
 
 def _persist_response_generation(
     ticket_id: str, started_at: datetime, result: dict[str, Any]
-) -> None:
+) -> bool:
+    schedule_revision = False
+    resolution_required = False
     with Session(database.engine) as session:
         ticket = session.get(RfpTicket, ticket_id)
         handoff = session.get(RfpHandoff, ticket_id)
@@ -400,6 +505,15 @@ def _persist_response_generation(
             or not _is_current_generation(ticket, started_at)
         ):
             raise RfpIntakeError("El ticket o handoff desapareció durante la generación.")
+        approval_branches = session.exec(
+            select(RfpApprovalBranch).where(
+                RfpApprovalBranch.ticket_id == ticket_id
+            )
+        ).all()
+        has_approval_workflow = bool(approval_branches)
+        branches_by_department = {
+            branch.department_id: branch for branch in approval_branches
+        }
         for section_result in result["sections"]:
             section = session.get(
                 RfpDepartmentSection,
@@ -409,20 +523,116 @@ def _persist_response_generation(
                 raise RfpIntakeError(
                     "Una sección desapareció durante la generación de respuestas."
                 )
-            section.draft_content = section_result["draft_content"]
-            section.evaluation_results = section_result["evaluation_results"]
+            new_draft = section_result["draft_content"]
+            new_bundle = section_result["evaluation_results"]
+            branch = branches_by_department.get(section_result["department_id"])
+            if branch is not None:
+                new_digest = draft_digest(new_draft)
+                new_version = int(new_bundle["iteration_count"])
+                if (
+                    branch.draft_sha256 != new_digest
+                    or branch.draft_version != new_version
+                ):
+                    section.approval_status = "pending"
+                    section.approver = None
+                    section.approved_at = None
+                    branch.status = "pending"
+                    branch.draft_sha256 = new_digest
+                    branch.draft_version = new_version
+                    branch.updated_at = datetime.now(UTC)
+                    session.add(branch)
+            section.draft_content = new_draft
+            section.evaluation_results = new_bundle
             session.add(section)
+
+        if has_approval_workflow:
+            for section_result in result["sections"]:
+                department_id = section_result["department_id"]
+                section = session.get(
+                    RfpDepartmentSection, (ticket_id, department_id)
+                )
+                branch = branches_by_department.get(department_id)
+                if section is None or branch is None:
+                    raise RfpIntakeError(
+                        "Una rama de aprobación desapareció durante la revisión."
+                    )
+                if branch.status in {"revision_requested", "needs_human_review"}:
+                    branch.draft_sha256 = draft_digest(section.draft_content or "")
+                    branch.draft_version = int(
+                        section.evaluation_results["iteration_count"]
+                    )
+                    branch.status = "pending"
+                    branch.updated_at = datetime.now(UTC)
+                    section.approval_status = "pending"
+                    section.approver = None
+                    section.approved_at = None
+                    session.add(section)
+                    session.add(branch)
 
         handoff.payload = result["handoff"]
         handoff.schema_version = result["handoff"]["schema_version"]
         handoff.status = result["handoff"]["response_generation"]["status"]
-        ticket.status = result["status"]
+        if has_approval_workflow:
+            metadata = session.get(RfpMetadataRecord, ticket_id)
+            current_sections = session.exec(
+                select(RfpDepartmentSection).where(
+                    RfpDepartmentSection.ticket_id == ticket_id
+                )
+            ).all()
+            if metadata is None:
+                raise RfpApprovalError(
+                    "Faltan metadatos para continuar la aprobación."
+                )
+            validated_sections = validate_approval_handoff(
+                ticket_id, handoff.payload, current_sections
+            )
+            conflicts = detect_structured_conflicts(
+                metadata.model_dump(), validated_sections
+            )
+            for conflict in conflicts:
+                arbitration = _store_arbitration(
+                    session, ticket_id, conflict, validated_sections
+                )
+                for department_id in conflict["departments"]:
+                    section = session.get(
+                        RfpDepartmentSection, (ticket_id, department_id)
+                    )
+                    branch = session.get(
+                        RfpApprovalBranch, (ticket_id, department_id)
+                    )
+                    if section is None or branch is None:
+                        raise RfpApprovalError(
+                            "Falta una sección o rama para el arbitraje."
+                        )
+                    if branch.status in {"revision_requested", "needs_human_review"}:
+                        resolution_required = True
+                        continue
+                    if _prepare_revision(section, branch, conflict["rule"]):
+                        schedule_revision = True
+                        _sync_handoff_section(handoff, section)
+                    else:
+                        arbitration.result = "limit_exhausted"
+                        session.add(arbitration)
+                        ticket.status = "needs_human_review"
+                    session.add(section)
+                    session.add(branch)
+            if schedule_revision:
+                ticket.status = "generando_borrador"
+                ticket.processing_started_at = datetime.now(UTC)
+            elif resolution_required:
+                ticket.status = "needs_human_review"
+            elif ticket.status != "needs_human_review":
+                ticket.status = "esperando_aprobación"
+        else:
+            ticket.status = result["status"]
         ticket.processing_error = None
-        ticket.processing_started_at = None
+        if not schedule_revision:
+            ticket.processing_started_at = None
         ticket.updated_at = datetime.now(UTC)
         session.add(handoff)
         session.add(ticket)
         session.commit()
+    return schedule_revision
 
 
 def _record_response_generation_failure(
@@ -436,7 +646,12 @@ def _record_response_generation_failure(
             or not _is_current_generation(ticket, started_at)
         ):
             return
-        ticket.status = "analisis_completo"
+        has_approval_workflow = session.exec(
+            select(RfpApprovalBranch).where(
+                RfpApprovalBranch.ticket_id == ticket_id
+            )
+        ).first() is not None
+        ticket.status = "needs_human_review" if has_approval_workflow else "analisis_completo"
         ticket.processing_error = f"Error técnico al generar respuestas ({error_type})."
         ticket.processing_started_at = None
         ticket.updated_at = datetime.now(UTC)
@@ -489,7 +704,8 @@ def process_rfp_response_generation(ticket_id: str) -> None:
                 )
             ),
         )
-        _persist_response_generation(ticket_id, run_started_at, result)
+        if _persist_response_generation(ticket_id, run_started_at, result):
+            process_rfp_response_generation(ticket_id)
     except (RfpIntakeError, SQLAlchemyError, KeyError, TypeError, ValueError) as exc:
         logger.error(
             "RFP response generation failed (ticket_id=%s, error_type=%s)",
@@ -565,11 +781,20 @@ def list_rfp_tickets(
     current_user: UserInDB = AUTHENTICATED_USER,
     session: Session = DATABASE_SESSION,
 ) -> list[TicketSummary]:
+    departments = authorized_departments(current_user)
     tickets = session.exec(
         select(RfpTicket)
-        .where(RfpTicket.created_by == str(current_user.id))
+        .where(
+            (RfpTicket.created_by == str(current_user.id))
+            | (RfpTicket.status.in_((
+                "en-evaluación",
+                "needs_human_review",
+                "esperando_aprobación",
+                "terminado",
+            )))
+        )
         .order_by(RfpTicket.created_at.desc())
-        .limit(100)
+        .limit(200)
     ).all()
     stale_ticket_found = False
     for ticket in tickets:
@@ -577,7 +802,24 @@ def list_rfp_tickets(
     if stale_ticket_found:
         session.add_all(tickets)
         session.commit()
-    return [_summary(ticket) for ticket in tickets]
+    visible = []
+    for ticket in tickets:
+        if ticket.created_by == str(current_user.id):
+            visible.append(ticket)
+            continue
+        handoff = session.get(RfpHandoff, ticket.ticket_id)
+        workstreams = (
+            handoff.payload.get("active_workstreams", [])
+            if handoff and isinstance(handoff.payload, dict)
+            else []
+        )
+        if any(
+            isinstance(item, dict)
+            and item.get("department_id") in departments
+            for item in workstreams
+        ):
+            visible.append(ticket)
+    return [_summary(ticket) for ticket in visible]
 
 
 @rfp_intake_api.get("/tickets/{ticket_id}", response_model=TicketDetail)
@@ -586,8 +828,8 @@ def read_rfp_ticket(
     current_user: UserInDB = AUTHENTICATED_USER,
     session: Session = DATABASE_SESSION,
 ) -> TicketDetail:
-    ticket = _owned_ticket(session, str(ticket_id), current_user)
-    return _detail(session, ticket)
+    ticket = _visible_ticket(session, str(ticket_id), current_user)
+    return _detail(session, ticket, current_user)
 
 
 @rfp_intake_api.post(
@@ -652,3 +894,655 @@ def generate_rfp_response_ticket(
     session.refresh(ticket)
     background_tasks.add_task(process_rfp_response_generation, ticket.ticket_id)
     return _summary(ticket)
+
+
+def _approval_branch(
+    session: Session, ticket_id: str, section: dict[str, Any]
+) -> RfpApprovalBranch:
+    department_id = section["department_id"]
+    branch = session.get(RfpApprovalBranch, (ticket_id, department_id))
+    if branch is None:
+        branch = RfpApprovalBranch(
+            ticket_id=ticket_id,
+            department_id=department_id,
+            thread_id=f"rfp-{ticket_id}:{department_id}",
+            draft_sha256=section["draft_sha256"],
+            draft_version=section["draft_version"],
+        )
+        session.add(branch)
+    return branch
+
+
+def _store_arbitration(
+    session: Session, ticket_id: str, conflict: dict[str, Any], sections: list[dict[str, Any]]
+) -> RfpArbitrationRecord:
+    affected = [
+        section for section in sections
+        if section["department_id"] in conflict["departments"]
+    ]
+    identity = json.dumps(
+        {
+            "ticket_id": ticket_id,
+            "trigger_id": conflict["trigger_id"],
+            "drafts": {
+                section["department_id"]: {
+                    "digest": section["draft_sha256"],
+                    "version": section["draft_version"],
+                }
+                for section in affected
+            },
+        },
+        sort_keys=True,
+    )
+    key = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    existing = session.exec(
+        select(RfpArbitrationRecord).where(
+            RfpArbitrationRecord.idempotency_key == key
+        )
+    ).first()
+    if existing is not None:
+        return existing
+    arbitration = RfpArbitrationRecord(
+        idempotency_key=key,
+        ticket_id=ticket_id,
+        trigger_id=conflict["trigger_id"],
+        departments=conflict["departments"],
+        arbitrator=conflict["arbitrator"],
+        rule=conflict["rule"],
+        evidence=conflict["evidence"],
+        section_snapshots={
+            section["department_id"]: {
+                "draft_content": section["draft_content"],
+                "evaluation_results": deepcopy(section["evaluation_results"]),
+                "draft_sha256": section["draft_sha256"],
+                "draft_version": section["draft_version"],
+            }
+            for section in affected
+        },
+        result="request_changes",
+    )
+    session.add(arbitration)
+    return arbitration
+
+
+def _record_final_document(
+    session: Session,
+    ticket: RfpTicket,
+    metadata: RfpMetadataRecord,
+    sections: list[dict[str, Any]],
+) -> RfpFinalDocument:
+    existing = session.get(RfpFinalDocument, ticket.ticket_id)
+    digests = {
+        section["department_id"]: section["draft_sha256"] for section in sections
+    }
+    if existing is not None:
+        if existing.section_digests != digests:
+            raise RfpApprovalError(
+                "El documento final existente no corresponde a las aprobaciones actuales."
+            )
+        ticket.status = "terminado"
+        ticket.processing_error = None
+        ticket.processing_started_at = None
+        ticket.updated_at = datetime.now(UTC)
+        session.add(ticket)
+        return existing
+
+    document = RfpFinalDocument(
+        ticket_id=ticket.ticket_id,
+        document_format="application/json",
+        version=1,
+        sections=[
+            {
+                "department_id": section["department_id"],
+                "draft_content": section["draft_content"],
+                "evaluation_results": section["evaluation_results"],
+                "approver": section["approver"],
+                "approved_at": section["approved_at"],
+            }
+            for section in sections
+        ],
+        currency=metadata.currency,
+        section_digests=digests,
+    )
+    session.add(document)
+    ticket.status = "terminado"
+    ticket.processing_error = None
+    ticket.processing_started_at = None
+    ticket.updated_at = datetime.now(UTC)
+    session.add(ticket)
+    return document
+
+
+def _prepare_revision(
+    section: RfpDepartmentSection, branch: RfpApprovalBranch, feedback: str
+) -> bool:
+    bundle = deepcopy(section.evaluation_results)
+    if not isinstance(bundle, dict):
+        raise RfpApprovalError("La sección no conserva una evaluación válida.")
+    iteration_count = bundle.get("iteration_count")
+    if not isinstance(iteration_count, int):
+        raise RfpApprovalError("La evaluación no conserva su contador de iteraciones.")
+    if iteration_count >= MAX_GENERATION_ATTEMPTS:
+        section.approval_status = "needs_human_review"
+        branch.status = "needs_human_review"
+        return False
+
+    result = bundle.get("result")
+    if not isinstance(result, dict):
+        raise RfpApprovalError("La evaluación estructurada no es válida.")
+    existing_feedback = str(result.get("feedback_for_generator", "")).strip()
+    result["feedback_for_generator"] = (
+        f"{existing_feedback} Feedback del revisor: {feedback.strip()}".strip()
+    )
+    bundle["section_status"] = "needs_revision"
+    section.evaluation_results = bundle
+    section.approval_status = "changes_requested"
+    branch.status = "revision_requested"
+    return True
+
+
+def _sync_handoff_section(
+    handoff: RfpHandoff, section: RfpDepartmentSection
+) -> None:
+    payload = dict(handoff.payload)
+    workstreams = payload.get("active_workstreams")
+    if not isinstance(workstreams, list):
+        raise RfpApprovalError("El handoff no conserva sus departamentos activos.")
+    updated = False
+    next_workstreams = []
+    for workstream in workstreams:
+        if (
+            isinstance(workstream, dict)
+            and workstream.get("department_id") == section.department_id
+        ):
+            next_workstreams.append(
+                {
+                    **workstream,
+                    "draft_content": section.draft_content,
+                    "evaluation_results": section.evaluation_results,
+                    "section_status": (
+                        section.evaluation_results.get("section_status")
+                        if isinstance(section.evaluation_results, dict)
+                        else None
+                    ),
+                    "iteration_count": (
+                        section.evaluation_results.get("iteration_count")
+                        if isinstance(section.evaluation_results, dict)
+                        else None
+                    ),
+                    "needs_human_review": (
+                        isinstance(section.evaluation_results, dict)
+                        and section.evaluation_results.get("section_status")
+                        == "needs_human_review"
+                    ),
+                }
+            )
+            updated = True
+        else:
+            next_workstreams.append(workstream)
+    if not updated:
+        raise RfpApprovalError(
+            "La sección no aparece en los departamentos activos del handoff."
+        )
+    payload["active_workstreams"] = next_workstreams
+    response_generation = payload.get("response_generation")
+    if isinstance(response_generation, dict):
+        payload["response_generation"] = {
+            **response_generation,
+            "status": "needs_human_review",
+        }
+    handoff.payload = payload
+    handoff.status = "needs_human_review"
+
+
+@rfp_intake_api.post(
+    "/tickets/{ticket_id}/approvals/start",
+    response_model=TicketSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def start_rfp_approvals(
+    ticket_id: UUID,
+    background_tasks: BackgroundTasks,
+    current_user: UserInDB = AUTHENTICATED_USER,
+    session: Session = DATABASE_SESSION,
+) -> TicketSummary:
+    locked_ticket = session.exec(
+        select(RfpTicket)
+        .where(RfpTicket.ticket_id == str(ticket_id))
+        .with_for_update()
+    ).first()
+    if locked_ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+    ticket = _visible_ticket(session, str(ticket_id), current_user)
+    if ticket.status == "terminado":
+        return _summary(ticket)
+    if ticket.status not in {
+        "en-evaluación",
+        "needs_human_review",
+        "esperando_aprobación",
+    } or ticket.processing_started_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El ticket no está listo para iniciar aprobaciones.",
+        )
+
+    handoff = session.get(RfpHandoff, ticket.ticket_id)
+    metadata = session.get(RfpMetadataRecord, ticket.ticket_id)
+    persisted_sections = session.exec(
+        select(RfpDepartmentSection).where(
+            RfpDepartmentSection.ticket_id == ticket.ticket_id
+        )
+    ).all()
+    try:
+        active_sections = validate_approval_handoff(
+            ticket.ticket_id,
+            handoff.payload if handoff else None,
+            persisted_sections,
+        )
+    except RfpApprovalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    if metadata is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Faltan metadatos RFP persistidos.",
+        )
+
+    conflicts = detect_structured_conflicts(metadata.model_dump(), active_sections)
+    section_by_department = {
+        section.department_id: section for section in persisted_sections
+    }
+    reprocess: set[str] = set()
+    exhausted = False
+    for section_data in active_sections:
+        branch = _approval_branch(session, ticket.ticket_id, section_data)
+        section = section_by_department[section_data["department_id"]]
+        if (
+            branch.draft_sha256 != section_data["draft_sha256"]
+            or branch.draft_version != section_data["draft_version"]
+        ):
+            branch.draft_sha256 = section_data["draft_sha256"]
+            branch.draft_version = section_data["draft_version"]
+            branch.status = "pending"
+            section.approval_status = "pending"
+            section.approver = None
+            section.approved_at = None
+
+    for conflict in conflicts:
+        arbitration = _store_arbitration(
+            session, ticket.ticket_id, conflict, active_sections
+        )
+        for department_id in conflict["departments"]:
+            section = section_by_department[department_id]
+            branch = session.get(RfpApprovalBranch, (ticket.ticket_id, department_id))
+            if branch is None:
+                raise RfpApprovalError("Falta la rama de aprobación.")
+            if branch.status in {"revision_requested", "needs_human_review"}:
+                exhausted = True
+                continue
+            should_reprocess = _prepare_revision(
+                section,
+                branch,
+                conflict["rule"],
+            )
+            if should_reprocess:
+                _sync_handoff_section(handoff, section)
+                reprocess.add(department_id)
+            else:
+                arbitration.result = "limit_exhausted"
+                session.add(arbitration)
+                exhausted = True
+            session.add(section)
+            session.add(branch)
+
+    if reprocess:
+        ticket.status = "generando_borrador"
+        ticket.processing_started_at = datetime.now(UTC)
+        ticket.processing_error = None
+    elif exhausted:
+        ticket.status = "needs_human_review"
+    else:
+        for section_data in active_sections:
+            branch = session.get(
+                RfpApprovalBranch,
+                (ticket.ticket_id, section_data["department_id"]),
+            )
+            if branch and branch.status != "approved":
+                branch.status = "pending"
+                section_by_department[section_data["department_id"]].approval_status = (
+                    "pending"
+                )
+                session.add(section_by_department[section_data["department_id"]])
+                session.add(branch)
+        ticket.status = "esperando_aprobación"
+    ticket.updated_at = datetime.now(UTC)
+    session.add(ticket)
+    session.commit()
+    session.refresh(ticket)
+    if reprocess:
+        background_tasks.add_task(process_rfp_response_generation, ticket.ticket_id)
+    return _summary(ticket)
+
+
+@rfp_intake_api.post(
+    "/tickets/{ticket_id}/approvals/{department_id}/resume",
+    response_model=TicketSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def resume_rfp_approval_revision(
+    ticket_id: UUID,
+    department_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: UserInDB = AUTHENTICATED_USER,
+    session: Session = DATABASE_SESSION,
+) -> TicketSummary:
+    if department_id not in authorized_departments(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para reanudar esta sección.",
+        )
+    ticket = session.exec(
+        select(RfpTicket)
+        .where(RfpTicket.ticket_id == str(ticket_id))
+        .with_for_update()
+    ).first()
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+    ticket = _visible_ticket(session, str(ticket_id), current_user)
+    if ticket.status != "needs_human_review" or ticket.processing_started_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="No hay una revisión interrumpida que pueda reanudarse.",
+        )
+    branch = session.get(RfpApprovalBranch, (str(ticket_id), department_id))
+    section = session.get(
+        RfpDepartmentSection, (str(ticket_id), department_id)
+    )
+    handoff = session.get(RfpHandoff, str(ticket_id))
+    if branch is None or section is None or handoff is None:
+        raise HTTPException(status_code=404, detail="Rama de aprobación no encontrada.")
+    bundle = section.evaluation_results
+    if (
+        branch.status != "revision_requested"
+        or not isinstance(bundle, dict)
+        or bundle.get("section_status") != "needs_revision"
+        or not isinstance(section.draft_content, str)
+        or branch.draft_sha256 != draft_digest(section.draft_content)
+        or branch.draft_version != bundle.get("iteration_count")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La rama no conserva una revisión interrumpida compatible.",
+        )
+    if branch.draft_version >= MAX_GENERATION_ATTEMPTS:
+        branch.status = "needs_human_review"
+        section.approval_status = "needs_human_review"
+        session.add(branch)
+        session.add(section)
+        session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Se agotó el límite de revisiones automáticas.",
+        )
+    try:
+        validate_approval_handoff(
+            str(ticket_id),
+            handoff.payload,
+            session.exec(
+                select(RfpDepartmentSection).where(
+                    RfpDepartmentSection.ticket_id == str(ticket_id)
+                )
+            ).all(),
+        )
+    except RfpApprovalError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+
+    ticket.status = "generando_borrador"
+    ticket.processing_error = None
+    ticket.processing_started_at = datetime.now(UTC)
+    ticket.updated_at = datetime.now(UTC)
+    session.add(ticket)
+    session.commit()
+    background_tasks.add_task(process_rfp_response_generation, str(ticket_id))
+    return _summary(ticket)
+
+
+@rfp_intake_api.post("/tickets/{ticket_id}/approvals/{department_id}/decision")
+def decide_rfp_approval(
+    ticket_id: UUID,
+    department_id: str,
+    payload: ApprovalDecisionRequest,
+    background_tasks: BackgroundTasks,
+    current_user: UserInDB = AUTHENTICATED_USER,
+    session: Session = DATABASE_SESSION,
+) -> dict[str, Any]:
+    if department_id not in authorized_departments(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para aprobar esta sección.",
+        )
+    locked_ticket = session.exec(
+        select(RfpTicket)
+        .where(RfpTicket.ticket_id == str(ticket_id))
+        .with_for_update()
+    ).first()
+    if locked_ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+    ticket = _visible_ticket(session, str(ticket_id), current_user)
+    section = session.get(
+        RfpDepartmentSection, (str(ticket_id), department_id)
+    )
+    branch = session.get(RfpApprovalBranch, (str(ticket_id), department_id))
+    if section is None or branch is None:
+        raise HTTPException(status_code=404, detail="Aprobación no encontrada.")
+    bundle = section.evaluation_results
+    result = bundle.get("result") if isinstance(bundle, dict) else None
+    if (
+        not isinstance(section.draft_content, str)
+        or not isinstance(result, dict)
+        or payload.draft_sha256 != branch.draft_sha256
+        or payload.draft_sha256 != result.get("draft_sha256")
+        or payload.draft_version != branch.draft_version
+        or payload.draft_version != bundle.get("iteration_count")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La decisión refiere a un borrador obsoleto.",
+        )
+    key_source = json.dumps(
+        {
+            "ticket_id": str(ticket_id),
+            "department_id": department_id,
+            "user_id": current_user.id,
+            "action": payload.action,
+            "comment": payload.comment,
+            "draft_sha256": payload.draft_sha256,
+            "draft_version": payload.draft_version,
+        },
+        sort_keys=True,
+    )
+    idempotency_key = hashlib.sha256(key_source.encode("utf-8")).hexdigest()
+    previous = session.exec(
+        select(RfpApprovalDecision).where(
+            RfpApprovalDecision.idempotency_key == idempotency_key
+        )
+    ).first()
+    if previous is not None:
+        return {
+            "decision": previous.model_dump(
+                mode="json",
+                exclude={"draft_snapshot", "evaluation_snapshot", "idempotency_key"},
+            ),
+            "ticket": _summary(ticket).model_dump(),
+        }
+    if ticket.status != "esperando_aprobación":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El ticket no está esperando una decisión de aprobación.",
+        )
+    prior_version_decision = session.exec(
+        select(RfpApprovalDecision).where(
+            RfpApprovalDecision.ticket_id == str(ticket_id),
+            RfpApprovalDecision.department_id == department_id,
+            RfpApprovalDecision.draft_sha256 == payload.draft_sha256,
+            RfpApprovalDecision.draft_version == payload.draft_version,
+        )
+    ).first()
+    if prior_version_decision is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe una decisión para esta versión del borrador.",
+        )
+    if branch.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La rama no está pendiente de decisión humana.",
+        )
+
+    decision = RfpApprovalDecision(
+        idempotency_key=idempotency_key,
+        ticket_id=str(ticket_id),
+        department_id=department_id,
+        approver_user_id=current_user.id,
+        approver_email=current_user.email,
+        action=payload.action,
+        comment=payload.comment.strip() if payload.comment else None,
+        draft_sha256=payload.draft_sha256,
+        draft_version=payload.draft_version,
+        result=payload.action,
+        draft_snapshot=section.draft_content,
+        evaluation_snapshot=deepcopy(bundle),
+    )
+    session.add(decision)
+
+    if payload.action == "approve":
+        section.approval_status = "approved"
+        section.approver = current_user.email
+        section.approved_at = datetime.now(UTC)
+        branch.status = "approved"
+        session.add(section)
+        session.add(branch)
+        all_branches = session.exec(
+            select(RfpApprovalBranch).where(
+                RfpApprovalBranch.ticket_id == str(ticket_id)
+            )
+        ).all()
+        if all(item.status == "approved" for item in all_branches):
+            all_sections = session.exec(
+                select(RfpDepartmentSection).where(
+                    RfpDepartmentSection.ticket_id == str(ticket_id)
+                )
+            ).all()
+            handoff = session.get(RfpHandoff, str(ticket_id))
+            metadata = session.get(RfpMetadataRecord, str(ticket_id))
+            try:
+                active_sections = validate_approval_handoff(
+                    str(ticket_id),
+                    handoff.payload if handoff else None,
+                    all_sections,
+                )
+            except RfpApprovalError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+                ) from exc
+            conflicts = detect_structured_conflicts(
+                metadata.model_dump() if metadata else {},
+                active_sections,
+            )
+            if conflicts:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="La síntesis está bloqueada por un conflicto de negocio.",
+                )
+            if metadata is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Faltan metadatos RFP persistidos.",
+                )
+            _record_final_document(
+                session,
+                ticket,
+                metadata,
+                [
+                    {
+                        **item,
+                        "approver": section_by_department.approver,
+                        "approved_at": section_by_department.approved_at.isoformat()
+                        if section_by_department.approved_at
+                        else None,
+                    }
+                    for item in active_sections
+                    for section_by_department in [session.get(
+                        RfpDepartmentSection, (str(ticket_id), item["department_id"])
+                    )]
+                ],
+            )
+    else:
+        should_reprocess = _prepare_revision(
+            section, branch, payload.comment or ""
+        )
+        if should_reprocess:
+            handoff = session.get(RfpHandoff, str(ticket_id))
+            if handoff is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="El handoff del ticket no está disponible.",
+                )
+            _sync_handoff_section(handoff, section)
+            session.add(handoff)
+            ticket.status = "generando_borrador"
+            ticket.processing_started_at = datetime.now(UTC)
+            ticket.processing_error = None
+        else:
+            ticket.status = "needs_human_review"
+        section.approver = current_user.email
+        section.approved_at = None
+        session.add(section)
+        session.add(branch)
+    ticket.updated_at = datetime.now(UTC)
+    session.add(ticket)
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La sección ya recibió una decisión para esta versión.",
+        ) from exc
+    session.refresh(ticket)
+    if payload.action != "approve" and branch.status == "revision_requested":
+        background_tasks.add_task(process_rfp_response_generation, ticket.ticket_id)
+    return {
+        "decision": decision.model_dump(
+            mode="json",
+            exclude={"draft_snapshot", "evaluation_snapshot", "idempotency_key"},
+        ),
+        "ticket": _summary(ticket).model_dump(),
+    }
+
+
+@rfp_intake_api.get("/tickets/{ticket_id}/final-document")
+def download_rfp_final_document(
+    ticket_id: UUID,
+    current_user: UserInDB = AUTHENTICATED_USER,
+    session: Session = DATABASE_SESSION,
+) -> JSONResponse:
+    ticket = _visible_ticket(session, str(ticket_id), current_user)
+    document = session.get(RfpFinalDocument, ticket.ticket_id)
+    if document is None or ticket.status != "terminado":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El documento final todavía no está disponible.",
+        )
+    payload = document.model_dump(mode="json")
+    return JSONResponse(
+        content=payload,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="rfp-{ticket.ticket_id}-final.json"'
+            )
+        },
+    )
