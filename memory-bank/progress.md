@@ -39,6 +39,21 @@ Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, 
 14. **Implementacion del pipeline de reporting** (sesion `feat/pipeline-implemented`): `data/pipelines/pipeline.py` implementa el flow Prefect `weekly_office_program_performance_flow` con tareas independientes de registro, extraccion de `telemetry_events`, agregacion semanal, carga idempotente por upsert y exportacion opcional de evaluacion. Se añadieron reintentos para tareas de base de datos, cache de 15 minutos en la transformacion con clave SHA-256, tablas de reporting y auditoria de corridas.
 15. **API de reporting**: nuevo router `services/reporting/routes.py` con consulta de KPIs semanales, ultima corrida y disparo manual autenticado; el router queda montado en `server.py`. Prefect 3 se declaro en `pyproject.toml` y `services/requirements.txt`.
 16. **Notificaciones SSE de tickets RFP** (sesion actual, rama `feature/sse-notifications`): Backend (`services/api/rfp_intake/sse.py`) con `RfpSseManager` singleton que gestiona colas async por conexion, publica eventos a todos los suscritos, emite keep-alive cada 30s. Endpoint `GET /rfp-intake/stream` devuelve `text/event-stream` autenticado con JWT. Frontend (`uis/backoffice/services/rfp-sse.ts`) con `RfpSseClient` que parsea frames SSE incrementales, soporta chunks parciales, valida JSON, reconecta con backoff exponencial (1s inicial, 2x multiplicador, max 30s, jitter 10%) hasta 10 intentos, deduplica por `ticket_id` en ventana de 5s. Hook React `useRfpSse` en `uis/backoffice/hooks/useRfpSse.ts` para integracion cleanp en componentes. Evento se publica exactamente cuando ticket entra en estado `analyzing` tras upload exitoso, con payload: `ticket_id`, `rfp_id`, `client_name`, `client_hq`, `services_requested`, `status`, `created_at`. Dashboard RfpIntakeClient integrado: muestra notificacion visual distinguible (fondo verde, icono check), refetch de lista al conectar/reconectar, deduplicacion por `ticket_id`, auto-dismiss tras 8s. Documentacion `docs/rfp-sse-design.md` con arquitectura, decisiones (SSE vs WebSockets, concurrencias, recuperacion), criterios de aceptacion, tests manuales de recuperacion (offline, multiples pestañas, reconexion). Tests unitarios backend+frontend de parsing, deduplicacion, autenticacion, reconexion.
+17. **WebSocket Streaming de Chat en Tiempo Real (Parte 2)** (rama `feature/websocket-chat`, commits `b30244d`, `87524f9`, `9ec856e`, `d691fdf`):
+    - Backend: Endpoint WebSocket `/ws/chat/{session_id}` con autenticacion JWT, validacion de autorizacion y handshake
+    - Modelos: `ChatSession` (persistencia de sesion) y `Message` (historial) con status tracking (pending/completed/interrupted)
+    - Pub/Sub Broker en memoria para desacoplamiento productor/consumidor, soporta multiples suscriptores sin duplicacion
+    - Chat Services: CRUD de sesiones y mensajes, integracion con BD SQLModel
+    - Streaming de tokens: funciones `stream_agent_response()` e `invoke_agent_for_chat()` que invocan LangGraph y publican eventos
+    - Interrupcion genuina: aborto de asyncio.Task (no LangGraph interrupt()), emit generation_interrupted, nuevo turno sin perder contexto
+    - Reconexion: session_snapshot en handshake con historial completo para rehidratacion tras caida de red
+    - Frontend: Cliente WebSocket TypeScript en `services/chat-ws.ts` con reconexion automatica (backoff exponencial, max 10 intentos)
+    - Hook React: `useChatWebSocket` para integracion simple con componentes
+    - UI: Componente `ChatWindow` con renderizado progresivo de tokens, boton de interrupcion, indicador de conexion
+    - Pagina de chat: `/chat` con sesion persistente y rehidratacion
+    - Tests: 16 tests (13 en P1 + 3 en P2), todos pasan, cubren modelos, pubsub, services, streaming, interrupcion, reconexion
+    - Documentacion: Design doc completo respondiendo a 3 preguntas de diseño, README con protocolo WebSocket y guias de desarrollo
+    - Validacion: Python/TypeScript compilacion correcta, tests 100% pass rate
 
 ## Parcial o pendiente
 1. Telemetría de almacenamiento implementada: tabla SQLModel `telemetry_events`, índices analíticos, validación parcial por evento y bulk insert.
