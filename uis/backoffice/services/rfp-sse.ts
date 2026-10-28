@@ -37,7 +37,7 @@ interface SseStreamConfig {
  */
 export class RfpSseClient {
   private url: string;
-  private config: Required<SseStreamConfig>;
+  private config: Required<Omit<SseStreamConfig, 'onError' | 'onOpen' | 'onClose'>> & Pick<SseStreamConfig, 'onError' | 'onOpen' | 'onClose'>;
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private response: Response | null = null;
   private reconnectAttempts = 0;
@@ -51,11 +51,14 @@ export class RfpSseClient {
   constructor(url: string, config: SseStreamConfig) {
     this.url = url;
     this.config = {
+      onEvent: config.onEvent,
+      onError: config.onError,
+      onOpen: config.onOpen,
+      onClose: config.onClose,
       maxReconnectAttempts: config.maxReconnectAttempts ?? 10,
       initialBackoffMs: config.initialBackoffMs ?? 1000,
       maxBackoffMs: config.maxBackoffMs ?? 30000,
-      ...config,
-    };
+    } as any;
   }
 
   /**
