@@ -163,7 +163,7 @@ def test_status_transition_uses_dedicated_patch_and_maps_business_error(
     backend.return_value = response(400)
     with pytest.raises(BackendFailure) as error:
         transition_incident(IncidentTransitionInput(
-            incident_id=17, status="resolved",
+            incident_id=17, status="in_progress",
         ))
     assert error.value.code == "INVALID_STATUS_TRANSITION"
 
@@ -179,7 +179,7 @@ def test_inventory_uses_get_only_and_searches_name_or_sku(backend, product):
     assert backend.call_args.args == (
         "GET", "https://backend.example.test/inventory/products",
     )
-    assert backend.call_args.kwargs["headers"] == {}
+    assert backend.call_args.kwargs["headers"]["Authorization"].startswith("Bearer ")
 
     backend.return_value = response(200, product.model_dump(mode="json"))
     assert get_products(InventoryGetInput(product_id=3)) == [product]

@@ -243,6 +243,7 @@ def test_guardrail_summary_endpoint_is_authenticated(monkeypatch) -> None:
 
     from services.agent import routes
     from services.api.users.auth import get_current_user
+    from services.api.users.models import Role, UserInDB
 
     app = FastAPI()
     app.include_router(routes.agent_api)
@@ -256,7 +257,15 @@ def test_guardrail_summary_endpoint_is_authenticated(monkeypatch) -> None:
 
     with TestClient(app) as client:
         assert client.get("/agent/guardrails/summary").status_code == 401
-        app.dependency_overrides[get_current_user] = lambda: object()
+        operator = UserInDB(
+            id=1,
+            email="operator@example.com",
+            hashed_password="synthetic-unused-hash",
+            is_active=True,
+            role=Role.MANAGER,
+            created_at="2026-10-28T00:00:00Z",
+        )
+        app.dependency_overrides[get_current_user] = lambda: operator
         response = client.get("/agent/guardrails/summary")
 
     assert response.status_code == 200

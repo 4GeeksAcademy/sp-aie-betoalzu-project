@@ -1,27 +1,27 @@
 """SSE (Server-Sent Events) manager for real-time RFP ticket notifications.
 
-Manages concurrent SSE connections, broadcasts events to all connected clients,
+Manages concurrent SSE connections, sends events only to their owner's clients,
 and handles connection lifecycle.
 """
 
 import asyncio
 import json
 import logging
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator
 
 logger = logging.getLogger(__name__)
 
 
 class RfpSseManager:
-    """Manages SSE connections and broadcasts RFP ticket creation events."""
+    """Manages owner-scoped SSE connections and RFP ticket creation events."""
 
     def __init__(self):
         """Initialize the SSE manager with empty queues."""
-        self._queues: dict[str, asyncio.Queue] = {}
+        self._queues: dict[str, tuple[str, asyncio.Queue]] = {}
         self._queue_counter = 0
         self._lock = asyncio.Lock()
 
-    async def subscribe(self) -> tuple[str, asyncio.Queue]:
+    async def subscribe(self, *, actor_id: str) -> tuple[str, asyncio.Queue]:
         """Create a new subscription and return its ID and queue.
 
         Returns:
@@ -31,7 +31,7 @@ class RfpSseManager:
             self._queue_counter += 1
             sub_id = f"sub_{self._queue_counter}"
             queue: asyncio.Queue = asyncio.Queue()
-            self._queues[sub_id] = queue
+            self._queues[sub_id] = (actor_id, queue)
             logger.info(f"SSE subscription created: {sub_id} (total: {len(self._queues)})")
             return sub_id, queue
 
@@ -46,32 +46,27 @@ class RfpSseManager:
                 del self._queues[sub_id]
                 logger.info(f"SSE subscription removed: {sub_id} (total: {len(self._queues)})")
 
-    async def publish(self, event_type: str, data: dict) -> None:
-        """Broadcast an event to all connected clients.
+    async def publish(self, event_type: str, data: dict, *, actor_id: str) -> None:
+        """Send an event only to clients belonging to its authenticated owner.
 
         Args:
             event_type: The SSE event name (e.g., "rfp_ticket_created").
             data: The JSON payload to send.
         """
+        message = {"event": event_type, "data": data}
         async with self._lock:
-            queue_count = len(self._queues)
+            queues = [
+                queue for owner_id, queue in self._queues.values()
+                if owner_id == actor_id
+            ]
+            for queue in queues:
+                queue.put_nowait(message)
 
-        if queue_count == 0:
+        if not queues:
             logger.debug(f"Event '{event_type}' published with no active subscriptions")
             return
 
-        message = {"event": event_type, "data": data}
-        tasks = [
-            self._queues[sub_id].put(message)
-            for sub_id in list(self._queues.keys())
-            if sub_id in self._queues
-        ]
-
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-            logger.info(
-                f"Event '{event_type}' published to {queue_count} subscription(s)"
-            )
+        logger.info("Event '%s' published to %s subscription(s)", event_type, len(queues))
 
     async def stream(
         self, sub_id: str, queue: asyncio.Queue, keep_alive_interval: float = 30.0

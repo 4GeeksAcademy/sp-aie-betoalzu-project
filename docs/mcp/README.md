@@ -25,7 +25,7 @@ Los valores de ejemplo no son credenciales reales. `MCP_AUTH_ISSUER` debe public
 
 El endpoint MCP es `http://localhost:8001/mcp` en desarrollo. La metadata protegida queda publicada en `/.well-known/oauth-protected-resource/mcp`; `/health/ready` solo comunica readiness y no revela tools ni datos. Todo el endpoint MCP, incluida inicialización y listado de tools, exige un bearer token en `Authorization`. No se aceptan credenciales en query string.
 
-Las incidencias usan `SUPPORT_AGENT_SERVICE_TOKEN` como credencial de servicio independiente del token OAuth del cliente MCP. Las llamadas REST están restringidas a:
+Las incidencias y el inventario usan `SUPPORT_AGENT_SERVICE_TOKEN` como credencial de servicio independiente del token OAuth del cliente MCP. Debe pertenecer a un usuario operativo `admin` o `manager`; un usuario normal no puede consultar incidencias. Las llamadas REST están restringidas a:
 
 - `GET /api/incidents` y `GET /api/incidents/{id}`.
 - `POST /api/incidents`.
@@ -34,6 +34,8 @@ Las incidencias usan `SUPPORT_AGENT_SERVICE_TOKEN` como credencial de servicio i
 - `GET /inventory/products` y `GET /inventory/products/{id}`.
 
 El servidor nunca usa rutas de escritura del inventario. `inventory_write_attempt` siempre responde `INVENTORY_READ_ONLY` sin llamar al backend.
+
+La resolución de incidencias está bloqueada en MCP con `HUMAN_CONFIRMATION_REQUIRED`, sin llamada HTTP. El backoffice solicita confirmación explícita y envía `confirm_resolution: true` al endpoint de estado. El backend exige confirmación booleana estricta y registra `resolved_by` y `resolution_confirmed_at`. No existe una excepción para tokens de servicio; no deben usarse fuera de MCP para simular una confirmación humana.
 
 ## Herramientas y errores
 

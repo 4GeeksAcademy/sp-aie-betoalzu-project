@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
 from services.api.users.services import get_user_by_email
-from services.api.users.models import UserInDB
+from services.api.users.models import Role, UserInDB
 
 # ---------------------------------------------------------------------------
 # Configuration from environment variables
@@ -98,5 +98,14 @@ async def get_admin_user(current_user: UserInDB = Depends(get_current_user)) -> 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required.",
+        )
+    return current_user
+
+
+async def get_operations_user(current_user: UserInDB = Depends(get_current_user)) -> UserInDB:
+    if current_user.role not in {Role.ADMIN, Role.MANAGER}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operations privileges required.",
         )
     return current_user

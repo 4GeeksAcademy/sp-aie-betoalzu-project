@@ -401,11 +401,15 @@ export async function updateIncident(id: number, data: Partial<IncidentInput>) {
   return normalizeIncident(response as Incident);
 }
 
-export async function updateIncidentStatus(id: number, status: Incident['status']) {
+export async function updateIncidentStatus(
+  id: number,
+  status: Incident['status'],
+  confirmResolution = false,
+) {
   const res = await fetch(`/api/incidents/${id}/status`, {
     method: 'PATCH',
     headers: authHeaders(),
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, confirm_resolution: confirmResolution }),
   });
   const response = await handleResponse(res);
   return normalizeIncident(response as Incident);

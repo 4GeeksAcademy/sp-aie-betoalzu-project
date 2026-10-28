@@ -8,13 +8,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.agent.support import TraceEvent, get_support_agent
-from services.api.users.auth import get_current_user
+from services.api.users.auth import get_current_user, get_operations_user
 from services.api.users.models import UserInDB
 
 logger = logging.getLogger(__name__)
 AUTHENTICATED_USER = Depends(get_current_user)
 
-agent_api = APIRouter(prefix="/agent", tags=["support-agent"])
+agent_api = APIRouter(
+    prefix="/agent",
+    tags=["support-agent"],
+    dependencies=[Depends(get_operations_user)],
+)
 
 
 class AgentQueryRequest(BaseModel):

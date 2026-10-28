@@ -785,7 +785,9 @@ async def upload_rfp(
         "status": "analyzing",
         "created_at": ticket.created_at.isoformat() if ticket.created_at else datetime.now(UTC).isoformat(),
     }
-    await sse_manager.publish("rfp_ticket_created", event_payload)
+    await sse_manager.publish(
+        "rfp_ticket_created", event_payload, actor_id=str(current_user.id),
+    )
 
     background_tasks.add_task(process_rfp_ticket, ticket_id)
     return _summary(ticket)
@@ -844,13 +846,13 @@ async def rfp_sse_stream(
 ) -> StreamingResponse:
     """Stream SSE events for RFP ticket creation.
 
-    Each client subscribes and receives `rfp_ticket_created` events
-    when new tickets enter the `analyzing` state.
+    Each client receives `rfp_ticket_created` events for its own tickets
+    when they enter the `analyzing` state.
 
     Requires JWT authentication. Returns text/event-stream.
     """
     sse_manager = get_sse_manager()
-    sub_id, queue = await sse_manager.subscribe()
+    sub_id, queue = await sse_manager.subscribe(actor_id=str(current_user.id))
 
     async def event_generator() -> AsyncGenerator[str, None]:
         try:

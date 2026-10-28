@@ -21,7 +21,7 @@ El sistema:
 
 **Responsabilidades:**
 - Mantener un registro de conexiones activas (suscriptores)
-- Publicar eventos (`rfp_ticket_created`) a todos los clientes conectados
+- Publicar eventos (`rfp_ticket_created`) solo a las conexiones del propietario autenticado
 - Gestionar el ciclo de vida de cada conexión
 - Emitir comentarios keep-alive cada 30 segundos para mantener la conexión abierta
 
@@ -32,8 +32,8 @@ El sistema:
 - Logging de conexiones y eventos para observabilidad
 
 **Flujo:**
-1. Cliente conecta → `subscribe()` crea un nuevo `sub_id` y cola
-2. Servidor publica evento → `publish()` envía a todas las colas
+1. Cliente conecta → `subscribe(actor_id=...)` crea un nuevo `sub_id` y cola ligados al ID del JWT
+2. Servidor publica evento → `publish(actor_id=...)` envía solo a las colas del creador del ticket
 3. Cliente se desconecta → `unsubscribe()` libera recursos
 
 ---
@@ -44,6 +44,7 @@ El sistema:
 
 **Características:**
 - Autentica cada conexión con JWT (mismo token del backoffice)
+- El ID de propietario procede del JWT, nunca de parámetros del navegador. Se conservan las notificaciones en varias pestañas del mismo usuario; otros usuarios, incluidos administradores no propietarios, no reciben ese evento de creación.
 - Devuelve `Content-Type: text/event-stream`
 - Headers: `Cache-Control: no-cache`, `X-Accel-Buffering: no` (deshabilita almacenamiento en caché de proxy)
 - Streaming de frames SSE con soporte para keep-alive

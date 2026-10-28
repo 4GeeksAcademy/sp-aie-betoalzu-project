@@ -53,6 +53,8 @@ def _serialize_incident(doc) -> IncidentOut:
         ticket_id=doc.get("ticket_id"),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
+        resolved_by=doc.get("resolved_by"),
+        resolution_confirmed_at=doc.get("resolution_confirmed_at"),
     )
 
 
@@ -178,13 +180,22 @@ def update_incident(incident_id: int, payload: IncidentUpdate) -> IncidentOut:
         db.close()
 
 
-def update_incident_status(incident_id: int, payload: IncidentStatusUpdate) -> IncidentOut:
+def update_incident_status(
+    incident_id: int,
+    payload: IncidentStatusUpdate,
+    *,
+    confirmed_by: str | None = None,
+) -> IncidentOut:
     """Transition an incident to a new status.
 
     Validates that the transition is allowed by VALID_TRANSITIONS.
     Raises ValueError on invalid transition.
     """
     new_status = payload.status
+    if new_status == IncidentStatus.RESOLVED and (
+        not payload.confirm_resolution or not confirmed_by
+    ):
+        raise ValueError("Resolution requires explicit human confirmation.")
 
     db, table = _open_incidents_table()
     try:
@@ -201,10 +212,14 @@ def update_incident_status(incident_id: int, payload: IncidentStatusUpdate) -> I
                 f"Allowed transitions: {[s.value for s in allowed] if allowed else 'none (terminal status)'}."
             )
 
-        table.update(
-            {"status": new_status.value, "updated_at": _utc_now_str()},
-            doc_ids=[incident_id],
-        )
+        updated_at = _utc_now_str()
+        changes = {"status": new_status.value, "updated_at": updated_at}
+        if new_status == IncidentStatus.RESOLVED:
+            changes.update({
+                "resolved_by": confirmed_by,
+                "resolution_confirmed_at": updated_at,
+            })
+        table.update(changes, doc_ids=[incident_id])
         updated = table.get(doc_id=incident_id)
         backend_cache.invalidate_tags(["incidents_summary", "incidents_list"])
         return _serialize_incident(updated)

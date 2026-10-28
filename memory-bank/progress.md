@@ -1,5 +1,43 @@
 # Progress — Estado del Proyecto
 
+## Auditoria de ciberseguridad - paso 5 (2026-10-28)
+
+- Informe completo en docs/cibersecurity-audit.md: NIST AI RMF 1.0/GenAI Profile, inventario de cuatro sistemas con responsables funcionales, RGPD/FIPA/FCRA, 30 evaluaciones OWASP 2021, acciones irreversibles, evidencias locales y residuales.
+- Verificacion final focalizada: 78 pruebas backend y 27 frontend aprobadas; se ajusto un fixture antiguo sin rol a manager, manteniendo el control de acceso.
+- Se reprodujo el comando exacto del canario previo usando codigo versionado y temporales; enlaces locales y cardinalidad de matriz OWASP validados. Critico corregido en 53a8d5f; permisos/cierre en 2948e8e; login en a3b7b39; SSE/tokens en e1f33e6.
+- Sin sign-off: tenancy pendiente, root SSH permitido en configuracion base local (efectividad no verificada), firewall sin permisos de lectura, servidor final no accesible y errores previos de chat/typecheck global. No se declaro cumplimiento legal ni endurecimiento productivo.
+- Se documentaron limites de contenido excluido y se actualizaron decisiones autorizadas en CONTEXT.md. No se modificaron secretos, lockfiles protegidos ni configuracion del host compartido.
+
+## Auditoria de ciberseguridad - paso 4 (2026-10-28)
+
+- El proxy de candidatos elimina Authorization y Cookie antes del proveedor publico; tres casos de capitalizacion validados sin red externa.
+- Los eventos SSE RFP se restringen al creador autenticado, preservando varias pestanas propias; otros usuarios ya no reciben IDs y tiempos de creacion ajenos.
+- Se actualizaron contratos SSE y documentacion relacionada. Validacion: 14 pruebas de API RFP/aislamiento y 3 pruebas frontend aprobadas; lint y tipos focalizados correctos.
+- No se afirma privacidad del Playground publico ni aislamiento por cliente del resto de sistemas. Hardening del servidor final pendiente de acceso operativo autorizado.
+
+## Auditoria de ciberseguridad - paso 3 (2026-10-28)
+
+- POST /login recibe JSON tipado; el proxy Next.js ya no construye URLs con contrasenas. Clientes query-only deben migrar a JSON.
+- Se conservan 401 para credenciales invalidas y 403 para usuarios inactivos. Pruebas del proxy comprueban que no se envian credenciales en la URL.
+- Validacion: 5 pruebas backend y 24 pruebas frontend aprobadas; lint y typecheck estricto del area aprobados.
+- El primer intento backend uso un dominio sintetico reservado que EmailStr rechaza; se corrigio unicamente el ejemplo y la repeticion paso. No se modificaron datos ni configuracion reales.
+
+## Auditoria de ciberseguridad - paso 2 (2026-10-28)
+
+- Contencion autorizada: incidencias, analizador y API del agente requieren admin/manager; inventario autentica lecturas y limita escrituras a esos roles. MCP autentica GET de productos.
+- Resolver tickets exige confirmacion booleana estricta y actor; se persisten responsable y fecha. La UI solicita confirmacion; MCP no puede resolver. No se afirma aislamiento por tenant ni prueba criptografica de presencia humana.
+- Validacion: 38 pruebas focalizadas aprobadas, incluida la inyeccion literal del briefing sin fuentes externas. Ruff y ESLint focalizados aprobados (dos warnings anteriores).
+- Typecheck global bloqueado por cinco errores anteriores en SSE/chat/vitest; typecheck estricto del area modificada e imports transitivos aprobado con configuracion temporal.
+- Informe y documentacion MCP actualizados; no se tocaron credenciales ni reglas del entorno compartido.
+
+## Auditoria de ciberseguridad - paso 1 (2026-10-28)
+
+- Se reprodujo una lectura arbitraria sin autenticacion con canarios temporales: archivo interno y traversal devolvian 200. No se leyeron secretos ni datos reales.
+- Se retiro el catch-all de server.py que publicaba la raiz del proyecto, conservando GET / y los routers de API.
+- Regresion aislada: 7 pruebas aprobadas (privados, traversal, symlink e indice). Ruff E9 y F focalizado y diff check aprobados.
+- Se inicio docs/cibersecurity-audit.md con evidencia antes/despues. El sistema sigue no aprobado; pendientes permisos, confirmacion de cierre, login y evaluacion completa.
+- Actualizacion del banco de memoria autorizada explicitamente; no se modificaron las otras rutas protegidas.
+
 ## Historial completo del proyecto (hitos por rama/commit, cronologico)
 Resumen consolidado de todo el trabajo realizado en el monorepo hasta la fecha, incluyendo hitos previos no documentados anteriormente en el memory bank:
 
