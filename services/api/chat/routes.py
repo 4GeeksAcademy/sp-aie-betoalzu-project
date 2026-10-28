@@ -14,6 +14,7 @@ from services.chat_service import ChatSessionService, MessageService
 from services.pubsub import get_pubsub_broker
 from services.database import get_session
 from services.api.users.auth import verify_jwt_token
+from services.agent_chat_service import invoke_agent_for_chat
 
 chat_api = APIRouter()
 
@@ -151,6 +152,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
     await pubsub.subscribe(channel, handle_pubsub_message)
     
     # 7. Escuchar eventos del cliente
+    current_generation_task: asyncio.Task | None = None  # Para rastrear y abortar si es necesario
+    current_message_id: str | None = None
+    
     try:
         while True:
             data = await websocket.receive_json()
@@ -168,9 +172,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                     continue
                 
                 # Crear mensaje de usuario
-                message_id = f"msg_{uuid4().hex[:8]}"
-                user_msg = await message_service.create_message(
-                    message_id=message_id,
+                user_message_id = f"msg_{uuid4().hex[:8]}"
+                await message_service.create_message(
+                    message_id=user_message_id,
                     session_id=session_id,
                     sender="user",
                     text=text,
@@ -182,13 +186,36 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                     "event": "user_message",
                     "data": {
                         "session_id": session_id,
-                        "message_id": message_id,
+                        "message_id": user_message_id,
                         "text": text,
                     }
                 })
                 
-                # TODO: Invocar el agente de soporte aquí
-                # Esto generará tokens que se publicarán en el canal pub/sub
+                # Crear mensaje de asistente (pendiente)
+                assistant_message_id = f"msg_{uuid4().hex[:8]}"
+                await message_service.create_message(
+                    message_id=assistant_message_id,
+                    session_id=session_id,
+                    sender="assistant",
+                    text="",
+                    status="pending",
+                )
+                
+                current_message_id = assistant_message_id
+                
+                # Invocar el agente en background
+                if current_generation_task and not current_generation_task.done():
+                    current_generation_task.cancel()
+                
+                current_generation_task = asyncio.create_task(
+                    invoke_agent_for_chat(
+                        question=text,
+                        session_id=session_id,
+                        message_id=assistant_message_id,
+                        user_id=user_id,
+                        client_id=client_id,
+                    )
+                )
                 
             elif event == "interrupt_requested":
                 # Usuario quiere interrumpir la generación actual
@@ -200,13 +227,75 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                     })
                     continue
                 
-                # TODO: Abortar stream del agente actual
-                # Emitir generation_interrupted
+                # Cancelar generación actual
+                if current_generation_task and not current_generation_task.done():
+                    current_generation_task.cancel()
+                    try:
+                        await current_generation_task
+                    except asyncio.CancelledError:
+                        pass
+                
+                # Emitir generación interrumpida
+                if current_message_id:
+                    await pubsub.publish(channel, {
+                        "event": "generation_interrupted",
+                        "data": {
+                            "session_id": session_id,
+                            "message_id": current_message_id,
+                            "status": "interrupted",
+                            "tokens_shown": 0,
+                        }
+                    })
+                
                 # Crear nuevo turno con new_input
+                user_message_id = f"msg_{uuid4().hex[:8]}"
+                await message_service.create_message(
+                    message_id=user_message_id,
+                    session_id=session_id,
+                    sender="user",
+                    text=new_input,
+                    status="completed",
+                )
+                
+                await pubsub.publish(channel, {
+                    "event": "user_message",
+                    "data": {
+                        "session_id": session_id,
+                        "message_id": user_message_id,
+                        "text": new_input,
+                    }
+                })
+                
+                # Crear nuevo mensaje de asistente
+                assistant_message_id = f"msg_{uuid4().hex[:8]}"
+                await message_service.create_message(
+                    message_id=assistant_message_id,
+                    session_id=session_id,
+                    sender="assistant",
+                    text="",
+                    status="pending",
+                )
+                
+                current_message_id = assistant_message_id
+                
+                # Invocar agente con nuevo input
+                current_generation_task = asyncio.create_task(
+                    invoke_agent_for_chat(
+                        question=new_input,
+                        session_id=session_id,
+                        message_id=assistant_message_id,
+                        user_id=user_id,
+                        client_id=client_id,
+                    )
+                )
     
     except WebSocketDisconnect:
         pass
     finally:
+        # Cancelar generación en curso
+        if current_generation_task and not current_generation_task.done():
+            current_generation_task.cancel()
+        
         # Desuscribirse al cerrar
         await pubsub.unsubscribe(channel, handle_pubsub_message)
         db.close()
