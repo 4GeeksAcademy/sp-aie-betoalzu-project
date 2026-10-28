@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -8,7 +9,7 @@ import threading
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, AsyncGenerator, Literal
 from uuid import UUID, uuid4
 
 from fastapi import (
@@ -20,7 +21,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlmodel import Session, select
@@ -50,6 +51,7 @@ from services.api.rfp_intake.models import (
 )
 from services.api.users.auth import get_current_user
 from services.api.users.models import UserInDB
+from services.api.rfp_intake.sse import get_sse_manager
 
 logger = logging.getLogger(__name__)
 rfp_intake_api = APIRouter(prefix="/rfp-intake", tags=["rfp-intake"])
@@ -772,8 +774,22 @@ async def upload_rfp(
         pdf_path.unlink(missing_ok=True)
         raise
 
+    # Publish SSE event for new ticket in analyzing state
+    sse_manager = get_sse_manager()
+    event_payload = {
+        "ticket_id": ticket.ticket_id,
+        "rfp_id": ticket.rfp_id,
+        "client_name": None,  # Will be updated after analysis
+        "client_hq": None,  # Will be updated after analysis
+        "services_requested": [],  # Will be updated after analysis
+        "status": "analyzing",
+        "created_at": ticket.created_at.isoformat() if ticket.created_at else datetime.now(UTC).isoformat(),
+    }
+    await sse_manager.publish("rfp_ticket_created", event_payload)
+
     background_tasks.add_task(process_rfp_ticket, ticket_id)
     return _summary(ticket)
+
 
 
 @rfp_intake_api.get("/tickets", response_model=list[TicketSummary])
@@ -820,6 +836,37 @@ def list_rfp_tickets(
         ):
             visible.append(ticket)
     return [_summary(ticket) for ticket in visible]
+
+
+@rfp_intake_api.get("/stream")
+async def rfp_sse_stream(
+    current_user: UserInDB = AUTHENTICATED_USER,
+) -> StreamingResponse:
+    """Stream SSE events for RFP ticket creation.
+
+    Each client subscribes and receives `rfp_ticket_created` events
+    when new tickets enter the `analyzing` state.
+
+    Requires JWT authentication. Returns text/event-stream.
+    """
+    sse_manager = get_sse_manager()
+    sub_id, queue = await sse_manager.subscribe()
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        try:
+            async for frame in sse_manager.stream(sub_id, queue):
+                yield frame
+        except Exception as e:
+            logger.error(f"SSE stream error for {sub_id}: {e}")
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @rfp_intake_api.get("/tickets/{ticket_id}", response_model=TicketDetail)
