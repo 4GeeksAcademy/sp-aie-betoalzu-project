@@ -7,7 +7,6 @@ Realizar una auditoría de seguridad del fork de Nexova y proponer o implementar
 Fuentes del encargo:
 
 - [Briefing de ciberseguridad](../docs/cibersecurity-audit-briefing.md)
-- Documento de requisitos `cibersecurity-audit.md` compartido con la tarea.
 
 ## Alcance
 
