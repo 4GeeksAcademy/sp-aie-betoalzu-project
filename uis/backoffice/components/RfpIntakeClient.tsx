@@ -18,6 +18,8 @@ import type {
   RfpTicketDetail,
   RfpTicketSummary,
 } from '@/types/rfp-intake';
+import { useRfpSse } from '@/hooks/useRfpSse';
+import type { RfpTicketCreatedEvent } from '@/services/rfp-sse';
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -405,6 +407,40 @@ export default function RfpIntakeClient() {
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [comments, setComments] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  const [notification, setNotification] = useState<RfpTicketCreatedEvent | null>(null);
+  const [notificationTimeout, setNotificationTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+  // SSE hook for real-time notifications
+  useRfpSse({
+    baseUrl,
+    onNewTicket: (newTicket) => {
+      // Show notification
+      setNotification(newTicket);
+      if (notificationTimeout) clearTimeout(notificationTimeout);
+      const timeout = setTimeout(() => {
+        setNotification(null);
+      }, 8000);
+      setNotificationTimeout(timeout);
+
+      // Refetch ticket list to ensure we have the latest data
+      void listRfpTickets()
+        .then((items) => {
+          setTickets(items);
+          // If no ticket is selected, select the new one
+          if (!selectedTicketId && items.length > 0) {
+            setSelectedTicketId(items[0].ticket_id);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to refresh ticket list after SSE event:', err);
+        });
+    },
+    onError: (err) => {
+      console.error('SSE connection error:', err);
+    },
+  });
 
   useEffect(() => {
     let active = true;
@@ -601,6 +637,41 @@ export default function RfpIntakeClient() {
 
   return (
     <div className="space-y-6">
+      {notification && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-4 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start gap-3">
+            <svg className="h-5 w-5 flex-shrink-0 text-green-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <div className="flex-1">
+              <p className="font-bold text-green-900">
+                Nuevo ticket RFP recibido
+              </p>
+              <dl className="mt-2 space-y-1 text-sm text-green-800">
+                <div>
+                  <dt className="font-semibold">Cliente:</dt>
+                  <dd>{notification.client_name || 'No especificado'}</dd>
+                </div>
+                <div>
+                  <dt className="font-semibold">Sede:</dt>
+                  <dd>{notification.client_hq || 'No especificado'}</dd>
+                </div>
+                {notification.services_requested.length > 0 && (
+                  <div>
+                    <dt className="font-semibold">Servicios:</dt>
+                    <dd>{notification.services_requested.join(', ')}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="font-semibold">Ticket ID:</dt>
+                  <dd className="font-mono text-xs">{notification.ticket_id}</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-bold text-slate-900">Recibir una RFP</h2>
         <p className="mt-1 text-sm text-slate-600">
