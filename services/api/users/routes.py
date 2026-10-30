@@ -147,7 +147,7 @@ def _send_reset_email(to_email: str, token: str) -> None:
     reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
 
     if not RESEND_API_KEY:
-        print(f"[DEV] Password reset email to {to_email}: {reset_link}")
+        logger.warning("Password reset email skipped: mail provider is not configured")
         return
 
     import requests  # lazy import

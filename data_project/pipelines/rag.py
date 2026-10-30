@@ -120,7 +120,7 @@ def retrieve(
             collection_name=COLLECTION_NAME,
             query=query_vector,
             limit=k,
-            score_threshold=min_score,
+            score_threshold=threshold,
             with_payload=True,
         )
     except UnexpectedResponse as exc:

@@ -94,9 +94,33 @@ class TraceStore:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS support_agent_trace_owners (
+                    run_id TEXT PRIMARY KEY,
+                    actor_id TEXT NOT NULL
+                )
+                """
+            )
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.database_path, timeout=30)
+
+    def set_owner(self, run_id: str, actor_id: str) -> None:
+        """Bind a trace id to its initiating authenticated actor once."""
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO support_agent_trace_owners (run_id, actor_id) VALUES (?, ?)",
+                (run_id, actor_id),
+            )
+
+    def is_owner(self, run_id: str, actor_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT actor_id FROM support_agent_trace_owners WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+        return row is not None and row[0] == actor_id
 
     def record(
         self,
@@ -716,6 +740,8 @@ class SupportAgent:
     ) -> AgentState:
         execution_id = run_id or str(uuid4())
         conversation = conversation_id or execution_id
+        if actor_id:
+            self.traces.set_owner(execution_id, actor_id)
         decision = inspect_user_input(question)
         if decision.action != "allow":
             self.traces.record(
@@ -946,7 +972,11 @@ class SupportAgent:
             {"configurable": {"thread_id": f"support-agent:{run_id}"}}
         )
 
-    def get_trace(self, run_id: str) -> list[TraceEvent]:
+    def get_trace(
+        self, run_id: str, *, actor_id: str | None = None
+    ) -> list[TraceEvent]:
+        if actor_id is not None and not self.traces.is_owner(run_id, actor_id):
+            return []
         return self.traces.get(run_id)
 
     def get_guardrail_summary(self) -> dict[str, Any]:
