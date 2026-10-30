@@ -1,5 +1,12 @@
 # Progress — Estado del Proyecto
 
+## Practicas seguras de IA - informe formal (2026-10-30, rama feature/nist-security-practices)
+
+- Informe `docs/informe-auditoria-seguridad-ia.md` en español, con fecha y commit auditado: inventario (4 sistemas del briefing + adicionales), NIST (CSF 2.0 Govern/Identify/Protect/Detect/Respond/Recover con marco NIST AI RMF 1.0/GenAI), OWASP Top 10:2021 x backend/frontend/agente, RGPD (AEPD 72h) / FIPA (30 días) / FCRA (no se da por hecho; sin evidencia de background checks), acciones irreversibles verificadas una por una, pruebas reproducibles con datos sintéticos, estado de servidor/red no verificable y ruta de remediación priorizada con criterios de cierre.
+- Controles corregidos en commit `fb4fc58` (rate limiting 429 con Retry-After, aislamiento de trazas por operador, log agent_audit minimizado sin la pregunta, score_threshold RAG, sin impresión del token de reset).
+- Suite de seguridad `tests/security/test_ai_controls.py` (5 aprobadas) + inyección del briefing (aprobada) + RAG (14 aprobadas, 3 fallos preexistentes documentados de FakeQdrantClient).
+- Estado global NO APROBADO para producción: servidor/red/firewall y tenancy no verificables; scoring CV y RAG de candidatos no encontrados; pendientes legales (DPIA, FCRA, base legal). Sin sign-off.
+
 ## Practicas seguras de IA - controles de codigo (2026-10-30, rama feature/nist-security-practices)
 
 - Rate limiting autenticado sobre inferencia de IA: `services/api/rate_limit.py` (ventana deslizante en proceso, 429 con Retry-After, límite por id de usuario) aplicado a `/knowledge/query` y `/agent/query`.
