@@ -1,5 +1,22 @@
 # Progress — Estado del Proyecto
 
+## Practicas seguras de IA - informe formal (2026-10-30, rama feature/nist-security-practices)
+
+- Informe `docs/informe-auditoria-seguridad-ia.md` en español, con fecha y commit auditado: inventario (4 sistemas del briefing + adicionales), NIST (CSF 2.0 Govern/Identify/Protect/Detect/Respond/Recover con marco NIST AI RMF 1.0/GenAI), OWASP Top 10:2021 x backend/frontend/agente, RGPD (AEPD 72h) / FIPA (30 días) / FCRA (no se da por hecho; sin evidencia de background checks), acciones irreversibles verificadas una por una, pruebas reproducibles con datos sintéticos, estado de servidor/red no verificable y ruta de remediación priorizada con criterios de cierre.
+- Controles corregidos en commit `fb4fc58` (rate limiting 429 con Retry-After, aislamiento de trazas por operador, log agent_audit minimizado sin la pregunta, score_threshold RAG, sin impresión del token de reset).
+- Suite de seguridad `tests/security/test_ai_controls.py` (5 aprobadas) + inyección del briefing (aprobada) + RAG (14 aprobadas, 3 fallos preexistentes documentados de FakeQdrantClient).
+- Estado global NO APROBADO para producción: servidor/red/firewall y tenancy no verificables; scoring CV y RAG de candidatos no encontrados; pendientes legales (DPIA, FCRA, base legal). Sin sign-off.
+
+## Practicas seguras de IA - controles de codigo (2026-10-30, rama feature/nist-security-practices)
+
+- Rate limiting autenticado sobre inferencia de IA: `services/api/rate_limit.py` (ventana deslizante en proceso, 429 con Retry-After, límite por id de usuario) aplicado a `/knowledge/query` y `/agent/query`.
+- Aislamiento de trazas del agente de soporte: la traza queda vinculada al operador que la inicia; otro operador autenticado recibe 404 y `get_trace` con actor ajeno devuelve lista vacía.
+- Registro estructurado de auditoría del agente: `agent_audit` con correlación, pseudónimo del actor (HMAC-SHA256 truncado 16), agente, decisión y marca de tiempo; minimiza campos y no incluye la pregunta del usuario.
+- Corrección en `data_project/pipelines/rag.py`: `score_threshold=threshold` (usa umbral mínimo 0.5 por defecto) en lugar de la variable `min_score` no definida.
+- `_send_reset_email` ya no imprime el enlace/token de restablecimiento en ausencia de proveedor de correo; emite warning estructurado.
+- Suite reproducible `tests/security/test_ai_controls.py` (app FastAPI mínima, sin `server.py`): 5 pruebas aprobadas (429 sin segunda inferencia, cuota por usuario, configuración inválida, aislamiento de traza, auditoría sin la pregunta). Test RAG: 14 aprobadas, 3 fallos preexistentes documentados de `FakeQdrantClient`.
+- Sin sign-off: se mantienen pendientes de las fases anteriores (tenancy, hardening productivo, firewall, servidor final). Informe formal pendiente en `docs/informe-auditoria-seguridad-ia.md`.
+
 ## Auditoria de ciberseguridad - paso 5 (2026-10-28)
 
 - Informe completo en docs/cibersecurity-audit.md: NIST AI RMF 1.0/GenAI Profile, inventario de cuatro sistemas con responsables funcionales, RGPD/FIPA/FCRA, 30 evaluaciones OWASP 2021, acciones irreversibles, evidencias locales y residuales.

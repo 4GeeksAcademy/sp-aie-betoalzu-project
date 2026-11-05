@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from data_project.pipelines.rag import query as rag_query
 from data_project.process.knowledge_base import setup as index_setup
+from services.api.rate_limit import require_model_inference_capacity
 from services.api.users.auth import get_admin_user, get_current_user
 from services.api.users.models import UserInDB
 
@@ -38,7 +39,11 @@ class IndexResponse(BaseModel):
 
 # ── Endpoints ────────────────────────────────────────────────────────────
 
-@knowledge_api.post("/query", response_model=QueryResponse)
+@knowledge_api.post(
+    "/query",
+    response_model=QueryResponse,
+    dependencies=[Depends(require_model_inference_capacity)],
+)
 def query_knowledge(
     body: QueryRequest,
     _: UserInDB = Depends(get_current_user),

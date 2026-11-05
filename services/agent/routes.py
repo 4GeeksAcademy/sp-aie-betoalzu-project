@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import os
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -8,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.agent.support import TraceEvent, get_support_agent
+from services.api.rate_limit import require_model_inference_capacity
 from services.api.users.auth import get_current_user, get_operations_user
 from services.api.users.models import UserInDB
 
@@ -66,7 +71,11 @@ class GuardrailSummaryResponse(BaseModel):
     by_guardrail: dict[str, dict[str, int]]
 
 
-@agent_api.post("/query", response_model=AgentQueryResponse)
+@agent_api.post(
+    "/query",
+    response_model=AgentQueryResponse,
+    dependencies=[Depends(require_model_inference_capacity)],
+)
 def query_agent(
     body: AgentQueryRequest,
     current_user: UserInDB = Depends(get_current_user),
@@ -96,6 +105,31 @@ def query_agent(
             },
         ) from exc
 
+    signing_key = os.getenv("SECRET_KEY", "").encode()
+    actor_pseudonym = hmac.new(
+        signing_key or b"missing-secret-key",
+        str(current_user.id).encode(),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+    logger.info(
+        "agent_audit",
+        extra={
+            "audit": {
+                "correlation_id": run_id,
+                "actor_pseudonym": actor_pseudonym,
+                "tenant_pseudonym": None,
+                "agent": "support",
+                "tool": None,
+                "decision": "rejected"
+                if result["error"] == "question_required"
+                else "completed",
+                "reason": result["error"],
+                "approval": None,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        },
+    )
+
     if result["error"] == "question_required":
         raise HTTPException(
             status_code=422,
@@ -115,9 +149,11 @@ def query_agent(
 @agent_api.get("/traces/{run_id}", response_model=AgentTraceResponse)
 def read_agent_trace(
     run_id: str,
-    _: UserInDB = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ) -> AgentTraceResponse:
-    events: list[TraceEvent] = get_support_agent().get_trace(run_id)
+    events: list[TraceEvent] = get_support_agent().get_trace(
+        run_id, actor_id=str(current_user.id)
+    )
     if not events:
         raise HTTPException(status_code=404, detail="Trace not found.")
     return AgentTraceResponse(run_id=run_id, events=events)
