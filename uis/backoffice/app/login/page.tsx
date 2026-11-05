@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, type FormEvent, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../lib/auth-context';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -23,7 +22,8 @@ function LoginForm() {
 
     try {
       await login(email, password);
-      router.push('/');
+      // Discard routes prefetched before the session cookie was set.
+      window.location.replace('/');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al iniciar sesion';
       setError(msg);

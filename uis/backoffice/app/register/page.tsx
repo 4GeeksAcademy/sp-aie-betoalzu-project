@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '../../lib/auth-context';
 
@@ -13,7 +12,6 @@ interface FieldErrors {
 }
 
 export default function RegisterPage() {
-  const router = useRouter();
   const { register } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -63,7 +61,8 @@ export default function RegisterPage() {
           ...(phone ? { phone } : {}),
         },
       });
-      router.push('/');
+      // Discard routes prefetched before the session cookie was set.
+      window.location.replace('/');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al registrarse';
 
