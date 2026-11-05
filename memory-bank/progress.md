@@ -1,5 +1,12 @@
 # Progress — Estado del Proyecto
 
+## Telemetry y Reporting - correccion de conectividad (2026-11-05)
+
+- Ambas vistas consultan rutas internas de Next.js mediante el proxy compartido, eliminando llamadas del navegador a localhost:8000. Reporting conserva Authorization y el filtro week_start.
+- La interfaz muestra errores del proxy/backend; documentada la configuracion API_URL del servidor.
+- Validacion: ESLint focalizado, build de produccion y TypeScript aprobados. Interfaces reconstruidas y activas; Telemetry devuelve 200 con contrato JSON correcto y Reporting devuelve 401 sin autenticacion. Consulta con sesion pendiente de comprobacion por el usuario.
+- Actualizacion de este archivo autorizada explicitamente; no se modificaron credenciales, configuracion local ni otras rutas protegidas.
+
 ## Base de conocimientos comercial - recuperacion y consultas asincronas (2026-11-05)
 
 - Coleccion ausente: error tipado y respuesta 503 con instrucciones de indexacion admin; se mantiene el endpoint sincrono.

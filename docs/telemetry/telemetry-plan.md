@@ -9,6 +9,17 @@
 
 ## Fase 1 — Catálogo Exhaustivo de Oportunidades de Datos
 
+### Acceso a los reportes desde el backoffice
+
+- Telemetry consulta `/api/telemetry/report` y Reporting consulta
+  `/api/reporting/weekly-office-program-performance`, conservando el filtro
+  `week_start` y la cabecera de autenticación de Reporting.
+- Las rutas internas usan el proxy compartido de Next.js: `API_URL` en el
+  servidor (preferida) o `NEXT_PUBLIC_API_URL` deben apuntar al backend.
+  El navegador no necesita acceso directo al puerto 8000, evitando problemas
+  de localhost, CORS y contenido mixto en Codespaces.
+- Los errores del backend se conservan y se muestran en la interfaz.
+
 ### 1.1 Métricas Obligatorias (del CONTEXT de Nexova)
 
 Estas métricas son el **piso mínimo** exigido por el negocio. Las cinco deben instrumentarse sin excepción.
