@@ -74,11 +74,11 @@ export class ChatWebSocketClient {
 
     return new Promise((resolve, reject) => {
       try {
-        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-        const host = window.location.host
-        const url = `${protocol}://${host}/ws/chat/${this.sessionId}?token=${encodeURIComponent(this.jwtToken || '')}`
+        const url = new URL(`/ws/chat/${encodeURIComponent(this.sessionId)}`, window.location.origin)
+        url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+        url.searchParams.set('token', this.jwtToken || '')
 
-        this.ws = new WebSocket(url)
+        this.ws = new WebSocket(url.toString())
         this.ws.onopen = () => {
           this.reconnectAttempts = 0
           this.reconnectDelay = this.initialReconnectDelay
@@ -324,6 +324,15 @@ export function useChatWebSocket(sessionId: string) {
 
     client.onToken(({ message_id, token }) => {
       setMessages((prev) => {
+        if (!prev.some((msg) => msg.message_id === message_id)) {
+          return [...prev, {
+            message_id,
+            sender: 'assistant',
+            text: '',
+            status: 'pending',
+            displayText: token,
+          }]
+        }
         return prev.map((msg) => {
           if (msg.message_id === message_id) {
             return {
@@ -370,12 +379,15 @@ export function useChatWebSocket(sessionId: string) {
     })
 
     client.onUserMsg(({ message_id, text }) => {
-      // El servidor siempre confirma el mensaje del usuario
-      // Aquí podemos actualizar si es necesario
+      setMessages((prev) => prev.some((msg) => msg.message_id === message_id)
+        ? prev
+        : [...prev, { message_id, text, sender: 'user', status: 'completed', displayText: text }])
     })
 
-    client.onErrorEvent(({ code, message }) => {
+    client.onErrorEvent(({ message }) => {
       setError(message)
+      setIsGenerating(false)
+      currentGeneratingMessageIdRef.current = null
     })
 
     // Conectar

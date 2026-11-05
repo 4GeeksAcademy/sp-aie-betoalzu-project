@@ -65,6 +65,23 @@ Implementación completa de streaming de chat en tiempo real con WebSocket bidir
    - Autenticarse (si es necesario)
    - Ir a `/chat` o `/chat?sessionId=XXX`
 
+El navegador usa `/ws/chat/{session_id}` en el mismo dominio de Next.js.
+El rewrite de Next.js reenvia la conexion al backend configurado mediante
+`API_URL`, `NEXT_PUBLIC_API_URL` o `BACKEND_URL`, en ese orden. Esta direccion
+debe ser accesible desde el servidor Next.js, no desde el navegador. Reiniciar
+el servidor de desarrollo o reconstruir y reiniciar produccion tras cambiarla.
+
+El backend valida el JWT del login y que el usuario siga activo. Si el token no
+incluye `client_id`, la sesion queda en el espacio `backoffice:{user.id}` y se
+mantiene la comprobacion de propietario; esto no implementa aislamiento entre
+empresas. La primera conexion autenticada crea la sesion si no existe.
+
+El adaptador WebSocket ejecuta `SupportAgent.invoke` en un hilo para conservar
+los controles de entrada/salida y el checkpoint SQLite sincronico. Publica la
+respuesta terminada en fragmentos, conservando espacios y saltos de linea;
+no transmite tokens durante la inferencia. Interrumpir detiene la entrega,
+pero no cancela una inferencia sincronica que ya este ejecutandose.
+
 ## 📡 Protocolo WebSocket
 
 ### Conexión

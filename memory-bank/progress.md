@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Chat de soporte - conexion y generacion de respuestas (2026-11-05)
+
+- WebSocket del navegador en el mismo dominio, reenviado por Next.js al backend; validacion del usuario activo con el JWT de login y espacio por usuario cuando no hay client_id. Las sesiones nuevas se crean al conectar y conservan la comprobacion de propietario.
+- Sustituida la llamada incompatible stream_events(version="v2") por SupportAgent.invoke en un hilo, preservando los controles del agente y SQLite sincronico. La respuesta se entrega por fragmentos al terminar; interrumpir no cancela la inferencia sincronica en curso.
+- La interfaz incorpora mensajes nuevos y libera el estado de generacion ante errores. Backend e interfaces reiniciados; build de produccion y recorrido WebSocket hasta autenticacion comprobados.
+- Validacion: cinco pruebas existentes de pub/sub aprobadas; comprobaciones sinteticas aisladas de respuesta, persistencia exacta, aislamiento de propietario y rechazo de usuario inactivo aprobadas. Lint focalizado aprobado con la regla react-hooks/refs desactivada por un error preexistente; tipos focalizados aprobados. Typecheck global bloqueado por import de vitest ausente en una prueba RFP ajena.
+- Actualizacion de este archivo autorizada explicitamente. Excluidos del commit los archivos SQLite de ejecucion y bytecode; no se incluyen credenciales ni configuracion local.
+
 ## Telemetry y Reporting - correccion de conectividad (2026-11-05)
 
 - Ambas vistas consultan rutas internas de Next.js mediante el proxy compartido, eliminando llamadas del navegador a localhost:8000. Reporting conserva Authorization y el filtro week_start.

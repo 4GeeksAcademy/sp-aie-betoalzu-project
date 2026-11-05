@@ -4,8 +4,9 @@ Endpoint: WebSocket /ws/chat/{session_id}
 Autenticación: JWT en query param (?token=<JWT>) o en primer frame
 """
 
-from fastapi import APIRouter, WebSocketDisconnect, Query, WebSocket, Depends, status
+from fastapi import APIRouter, WebSocketDisconnect, Query, WebSocket, HTTPException, status
 from fastapi.exceptions import WebSocketException
+from fastapi.security import HTTPAuthorizationCredentials
 import json
 import asyncio
 from uuid import uuid4
@@ -13,7 +14,7 @@ from uuid import uuid4
 from services.chat_service import ChatSessionService, MessageService
 from services.pubsub import get_pubsub_broker
 from services.database import get_session
-from services.api.users.auth import verify_jwt_token
+from services.api.users.auth import get_current_user, verify_jwt_token
 from services.agent_chat_service import invoke_agent_for_chat
 
 chat_api = APIRouter()
@@ -40,20 +41,22 @@ async def authenticate_websocket(
     if not jwt_token:
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Missing JWT")
     
+    payload = verify_jwt_token(jwt_token)
+    if not payload:
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid JWT")
+
     try:
-        payload = verify_jwt_token(jwt_token)
-        if not payload:
-            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid JWT")
-        
-        user_id = payload.get("sub")
-        client_id = payload.get("client_id")
-        
-        if not user_id or not client_id:
-            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Missing claims")
-        
-        return {"user_id": user_id, "client_id": client_id}
-    except Exception as e:
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
+        user = await get_current_user(
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials=jwt_token)
+        )
+    except HTTPException as exc:
+        raise WebSocketException(
+            code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail
+        ) from exc
+
+    # Backoffice tokens have no tenant claim; keep their sessions scoped per user.
+    client_id = payload.get("client_id") or f"backoffice:{user.id}"
+    return {"user_id": payload["sub"], "client_id": client_id}
 
 
 @chat_api.websocket("/ws/chat/{session_id}")
@@ -100,12 +103,12 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
     session = await chat_service.get_session(session_id)
     
     if not session:
-        await websocket.send_json({
-            "event": "error",
-            "data": {"code": 404, "message": f"Session {session_id} not found"}
-        })
-        await websocket.close(code=1000)
-        return
+        session = await chat_service.create_session(
+            session_id=session_id,
+            user_id=user_id,
+            client_id=client_id,
+            thread_id=session_id,
+        )
     
     # 4. Validar autorización (user_id es propietario)
     if session.user_id != user_id or session.client_id != client_id:

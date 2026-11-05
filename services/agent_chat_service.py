@@ -5,7 +5,6 @@ Maneja la invocación del agente con captura de eventos de token streaming.
 
 import asyncio
 from typing import AsyncGenerator, Optional
-from uuid import uuid4
 from sqlmodel import Session
 
 from services.agent.support import SupportAgent, get_support_agent
@@ -24,7 +23,7 @@ async def stream_agent_response(
     actor_id: str = "",
     actor_role: str = "",
 ) -> AsyncGenerator[dict, None]:
-    """Ejecutar el agente y transmitir eventos de streaming de tokens.
+    """Ejecutar el agente y transmitir la respuesta terminada por fragmentos.
     
     Publicará eventos en el canal pub/sub chat.{session_id}:
     - token_chunk: cada token generado
@@ -47,133 +46,49 @@ async def stream_agent_response(
     pubsub = get_pubsub_broker()
     channel = f"chat.{session_id}"
     
-    # Usar el thread_id derivado del session_id
-    thread_id = f"chat:{session_id}"
     conversation = conversation_id or session_id
     
     try:
         # Inicializar el contador de tokens
         token_count = 0
-        buffer = ""
-        
-        # Invocar el agente con streaming de eventos
-        # LangGraph stream_events es un generador síncrono, así que lo ejecutamos en un executor
-        loop = asyncio.get_event_loop()
-        
-        def get_stream_events():
-            """Obtener stream de eventos del agente."""
-            # Usar stream_events si está disponible, sino usar invoke
-            if hasattr(agent.graph, "stream_events"):
-                return agent.graph.stream_events(
-                    {
-                        "question": question,
-                        "context": [],
-                        "answer": "",
-                        "error": None,
-                        "run_id": f"ws_{uuid4().hex[:8]}",
-                        "memory_context": [],
-                        "conversation_id": conversation,
-                        "customer_id": customer_id,
-                        "actor_id": actor_id,
-                        "actor_role": actor_role,
-                        "response_composed": False,
-                    },
-                    {
-                        "configurable": {"thread_id": thread_id},
-                    },
-                    version="v2",  # v2 incluye eventos de token
-                )
-            else:
-                # Fallback: usar invoke y emular tokens
-                result = agent.invoke(
-                    question,
-                    conversation_id=conversation,
-                    customer_id=customer_id,
-                    actor_id=actor_id,
-                    actor_role=actor_role,
-                )
-                # Emular tokens de la respuesta
-                return result.get("answer", "")
-        
-        # Ejecutar en thread pool para no bloquear
-        events = await loop.run_in_executor(None, get_stream_events)
-        
-        # Procesar eventos
-        if isinstance(events, str):
-            # Fallback: respuesta simple, tokenizar
-            answer = events
-            tokens = answer.split()
-            for token in tokens:
-                token_count += 1
-                await pubsub.publish(channel, {
-                    "event": "token_chunk",
-                    "data": {
-                        "session_id": session_id,
-                        "message_id": message_id,
-                        "token": token + " ",
-                        "sequence": token_count,
-                    }
-                })
-                yield {"type": "token", "content": token}
-            
-            # Señalar fin
+        # invoke conserva los controles del agente y su checkpoint sincronico.
+        result = await asyncio.to_thread(
+            agent.invoke,
+            question,
+            conversation_id=conversation,
+            customer_id=customer_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        if result.get("error"):
+            raise RuntimeError(result["error"])
+        answer = result.get("answer")
+        if not isinstance(answer, str) or not answer.strip():
+            raise RuntimeError("Support agent returned an empty answer")
+
+        for offset in range(0, len(answer), 80):
+            token = answer[offset:offset + 80]
+            token_count += 1
             await pubsub.publish(channel, {
-                "event": "generation_completed",
+                "event": "token_chunk",
                 "data": {
                     "session_id": session_id,
                     "message_id": message_id,
-                    "status": "completed",
-                    "total_tokens": token_count,
+                    "token": token,
+                    "sequence": token_count,
                 }
             })
-        else:
-            # Procesar eventos reales de LangGraph
-            full_answer = ""
-            for event in events:
-                event_type = event.get("event")
-                data = event.get("data", {})
-                
-                # Detectar cuando se genera un token (varía según LangGraph version)
-                if event_type == "on_chat_model_stream":
-                    # Evento de stream de modelo
-                    chunk = data.get("chunk", {})
-                    if hasattr(chunk, "content"):
-                        token = chunk.content
-                    elif isinstance(chunk, dict):
-                        token = chunk.get("content", "")
-                    else:
-                        token = str(chunk)
-                    
-                    if token:
-                        token_count += 1
-                        full_answer += token
-                        
-                        await pubsub.publish(channel, {
-                            "event": "token_chunk",
-                            "data": {
-                                "session_id": session_id,
-                                "message_id": message_id,
-                                "token": token,
-                                "sequence": token_count,
-                            }
-                        })
-                        yield {"type": "token", "content": token}
-                
-                elif event_type == "on_chain_end":
-                    # Fin de la cadena/grafo
-                    if data.get("output", {}).get("answer"):
-                        full_answer = data["output"]["answer"]
-            
-            # Señalar fin
-            await pubsub.publish(channel, {
-                "event": "generation_completed",
-                "data": {
-                    "session_id": session_id,
-                    "message_id": message_id,
-                    "status": "completed",
-                    "total_tokens": token_count,
-                }
-            })
+            yield {"type": "token", "content": token}
+
+        await pubsub.publish(channel, {
+            "event": "generation_completed",
+            "data": {
+                "session_id": session_id,
+                "message_id": message_id,
+                "status": "completed",
+                "total_tokens": token_count,
+            }
+        })
             
     except asyncio.CancelledError:
         # Streaming cancelado por el usuario
