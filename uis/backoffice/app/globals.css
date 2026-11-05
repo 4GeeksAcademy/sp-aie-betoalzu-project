@@ -1,11 +1,19 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --background: #f8fafc;
   --foreground: #0f172a;
   --font-geist-sans: "Geist Variable";
   --font-geist-mono: "Geist Mono Variable";
   --font-outfit: "Outfit Variable";
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #020617;
+  --foreground: #e2e8f0;
+  --color-surface: #020617;
 }
 
 @theme inline {
@@ -36,4 +44,70 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-outfit), "Segoe UI", sans-serif;
+}
+
+/* Existing tools share neutral utilities; keep both themes consistent without changing their logic. */
+@layer utilities {
+  html[data-theme="dark"] {
+    :is(.bg-white, .bg-white\/95, .bg-white\/90, .surface-card) {
+      background-color: #0f172a;
+    }
+
+    :is(.bg-slate-50, .bg-gray-50, .bg-slate-100, .bg-gray-100) {
+      background-color: #1e293b;
+    }
+
+    :is(.bg-slate-200, .bg-gray-200) {
+      background-color: #334155;
+    }
+
+    :is(.text-slate-900, .text-slate-800, .text-gray-900, .text-gray-800) {
+      color: #f1f5f9;
+    }
+
+    :is(.text-slate-700, .text-slate-600, .text-gray-700, .text-gray-600) {
+      color: #cbd5e1;
+    }
+
+    :is(.text-slate-500, .text-slate-400, .text-gray-500, .text-gray-400) {
+      color: #94a3b8;
+    }
+
+    :is(.border-slate-200, .border-slate-200\/70, .border-slate-200\/80, .border-slate-300, .border-gray-200, .border-gray-300, .surface-card) {
+      border-color: #334155;
+    }
+
+    :is(.divide-slate-100, .divide-slate-200, .divide-gray-200) > :not(:last-child) {
+      border-color: #334155;
+    }
+
+    :is(.bg-teal-50, .bg-brand\/10) {
+      background-color: #134e4a;
+    }
+
+    .text-brand {
+      color: #5eead4;
+    }
+
+    :is(.hover\:bg-slate-50, .hover\:bg-slate-100, .hover\:bg-gray-50, .hover\:bg-gray-100):hover {
+      background-color: #1e293b;
+    }
+
+    :is(.hover\:bg-slate-200, .hover\:bg-gray-200):hover {
+      background-color: #334155;
+    }
+
+    :is(.hover\:text-brand:hover, .group:hover .group-hover\:text-brand) {
+      color: #5eead4;
+    }
+
+    :is(.shadow-slate-200\/60, .shadow-slate-900\/10, .hover\:shadow-teal-900\/5) {
+      --tw-shadow-color: rgb(0 0 0 / 0.25);
+    }
+
+    :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+      background-color: #0f172a;
+      color: #e2e8f0;
+    }
+  }
 }
