@@ -44,7 +44,7 @@
 1. Recibe pregunta del SDR como texto
 2. Embediza la pregunta usando el mismo endpoint de embeddings
 3. Busqueda por similitud coseno en colección `nexova_knowledge`
-4. Retorna hasta `k=5` resultados con `score >= min_score` (default: 0.5)
+4. Retorna hasta `k=8` resultados con `score >= min_score` (default: 0.25, configurable mediante `RAG_MIN_SCORE`)
 5. Devuelve solo los payloads (sin scores ni vectores)
 
 ### 2.3 Generación (`generate_answer` en `rag.py`)
@@ -78,12 +78,31 @@
 
 ## 4. Endpoint API
 
+### Consultas en segundo plano (backoffice)
+
+- `POST /knowledge/jobs` acepta `{ "question": "..." }`, requiere autenticación
+  y la misma cuota de inferencia que la consulta síncrona. Devuelve 202 con
+  `job_id` y `status: "pending"` sin esperar al proveedor.
+- `GET /knowledge/jobs/{job_id}` requiere al usuario creador. Devuelve
+  `pending`, `completed` con `answer`, o `failed` con `detail`. Otros usuarios
+  reciben 404. La interfaz consulta cada 2 segundos con timeout de 15 segundos
+  por petición, hasta 30 minutos, evitando mantener abierto el túnel durante
+  la inferencia.
+- Se admite una consulta pendiente por usuario y ocho globales; la saturación
+  devuelve 409/429. Se conservan hasta 64 trabajos, durante 15 minutos tras
+  terminar. No se guardan preguntas en el registro de trabajos.
+- El almacén es local al proceso y se pierde al reiniciar: los trabajos
+  desaparecidos devuelven 404 explícito. Este flujo requiere **un worker/una
+  réplica**; antes de escalar hay que usar una cola y almacén compartidos.
+- Se mantiene `POST /knowledge/query` para clientes existentes.
+
 ### `POST /knowledge/query`
 
 - **Auth**: Bearer token (cualquier usuario autenticado)
 - **Request**: `{ "question": "string (1-2000 chars)" }`
 - **Response 200**: `{ "answer": "string" }`
 - **Response 422**: Validación Pydantic (pregunta inválida)
+- **Response 503**: La colección `nexova_knowledge` no existe; un administrador debe ejecutar `POST /knowledge/index` antes de consultar. El backoffice muestra el mensaje de indexación pendiente.
 - **Response 502**: Error del LLM o Qdrant
 
 ### `POST /knowledge/index`
@@ -91,6 +110,11 @@
 - **Auth**: Bearer token (rol admin)
 - **Response 201**: `{ "status": "ok", "indexed": { "source_document": count } }`
 - **Propósito**: Re-indexación idempotente de todos los documentos fuente
+
+Si la colección aún no existe, abrir `/docs` en el backend, autenticarse
+con una cuenta admin y ejecutar `POST /knowledge/index`. Una respuesta
+201 confirma la indexación; después se puede repetir la consulta comercial.
+La indexación no se ejecuta automáticamente desde las consultas de usuarios.
 
 ## 5. Evaluación (Recall@3)
 
@@ -109,7 +133,7 @@
 | `EMBEDDING_DIMENSION` | Dimensión del vector (opcional, se determina dinámicamente) | No |
 | `QDRANT_URL` | URL del servidor Qdrant | No (default `http://localhost:6333`) |
 | `QDRANT_DISTANCE` | Métrica de similitud | No (default `Cosine`) |
-| `RAG_MIN_SCORE` | Umbral mínimo de similitud para retrieval | No (default `0.5`) |
+| `RAG_MIN_SCORE` | Umbral mínimo de similitud para retrieval | No (default `0.25`) |
 | `LLM_API_URL` | URL base del LLM (OpenAI-compatible) | Sí |
 | `LLM_MODEL` | Modelo de generación | Sí (default `gpt-4o-mini`) |
 | `LLM_API_KEY` | API key del LLM | Sí |

@@ -39,9 +39,14 @@ export default function TelemetryDashboardPage() {
   useEffect(() => {
     const loadReport = async () => {
       try {
-        const response = await fetch('http://localhost:8000/telemetry/report');
+        const response = await fetch('/api/telemetry/report');
         if (!response.ok) {
-          throw new Error('No se pudo obtener el reporte de telemetría');
+          const payload: { error?: unknown } = await response.json();
+          throw new Error(
+            typeof payload.error === 'string'
+              ? payload.error
+              : 'No se pudo obtener el reporte de telemetría',
+          );
         }
         const payload = (await response.json()) as TelemetryReport;
         setReport(payload);

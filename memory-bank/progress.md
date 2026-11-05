@@ -1,12 +1,19 @@
 # Progress — Estado del Proyecto
 
-## Backoffice - rediseño y alternancia de tema (2026-11-05)
+## Telemetry y Reporting - correccion de conectividad (2026-11-05)
 
-- Portada con diez herramientas agrupadas por area y catalogo compartido con el desplegable de la navbar. La accion de registrar candidaturas permanece solo dentro del Pipeline Tracker.
-- Navbar compacta con perfil, cierre de sesion y boton claro/oscuro. Preferencia persistida localmente, tema inicial del sistema, sincronizacion entre pestañas e inicializacion previa al render.
-- Estilos oscuros compartidos para superficies, textos, tablas y formularios, sin cambios de backend, API ni autenticacion.
-- Validacion: ESLint focalizado, TypeScript estricto del area y dependencias transitivas, ocho pruebas existentes de autenticacion y siete comprobaciones de tema aprobadas. Compilacion y activacion verificadas durante la implementacion.
-- Rama de entrega creada desde main para excluir tres commits previos ajenos. Actualizacion de este archivo autorizada explicitamente.
+- Ambas vistas consultan rutas internas de Next.js mediante el proxy compartido, eliminando llamadas del navegador a localhost:8000. Reporting conserva Authorization y el filtro week_start.
+- La interfaz muestra errores del proxy/backend; documentada la configuracion API_URL del servidor.
+- Validacion: ESLint focalizado, build de produccion y TypeScript aprobados. Interfaces reconstruidas y activas; Telemetry devuelve 200 con contrato JSON correcto y Reporting devuelve 401 sin autenticacion. Consulta con sesion pendiente de comprobacion por el usuario.
+- Actualizacion de este archivo autorizada explicitamente; no se modificaron credenciales, configuracion local ni otras rutas protegidas.
+
+## Base de conocimientos comercial - recuperacion y consultas asincronas (2026-11-05)
+
+- Coleccion ausente: error tipado y respuesta 503 con instrucciones de indexacion admin; se mantiene el endpoint sincrono.
+- Recuperacion calibrada con el corpus actual: hasta 8 fragmentos, umbral predeterminado 0.25 y configuracion RAG_MIN_SCORE validada. Fuente relevante en 12/12 preguntas comerciales; Recall@3 11/12; tres controles ajenos sin contexto ni generacion.
+- Backoffice usa POST /knowledge/jobs (202) y consulta de estado autenticada; resultados aislados por creador, limites de capacidad y caducidad. Almacen local al proceso: requiere un worker/replica y se pierde al reiniciar.
+- Validacion: nueve pruebas RAG existentes aprobadas, tres excluidas por fixtures previamente defectuosos; lint focalizado y build Next.js con TypeScript aprobados. Comprobaciones aisladas de estados, errores, 401/404/409 y aceptacion HTTP en 0.06 segundos mientras el modelo sigue ocupado.
+- Backend e interfaz activados y rutas verificadas. No se incluyen credenciales, configuracion local, datos ni cambios previos ajenos a esta correccion.
 
 ## Practicas seguras de IA - informe formal (2026-10-30, rama feature/nist-security-practices)
 

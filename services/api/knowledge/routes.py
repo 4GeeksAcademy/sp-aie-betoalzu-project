@@ -7,12 +7,16 @@ Endpoints:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+from uuid import UUID
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from data_project.pipelines.rag import query as rag_query
+from data_project.pipelines.rag import KnowledgeNotIndexedError, query as rag_query
 from data_project.process.knowledge_base import setup as index_setup
 from services.api.rate_limit import require_model_inference_capacity
+from services.api.knowledge.jobs import create_job, get_job, run_job
 from services.api.users.auth import get_admin_user, get_current_user
 from services.api.users.models import UserInDB
 
@@ -37,7 +41,40 @@ class IndexResponse(BaseModel):
     indexed: dict
 
 
+class JobResponse(BaseModel):
+    job_id: str
+    status: Literal["pending", "completed", "failed"]
+    answer: str | None = None
+    detail: str | None = None
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────
+
+@knowledge_api.post(
+    "/jobs",
+    response_model=JobResponse,
+    status_code=202,
+    dependencies=[Depends(require_model_inference_capacity)],
+)
+def start_knowledge_job(
+    body: QueryRequest,
+    background_tasks: BackgroundTasks,
+    user: UserInDB = Depends(get_current_user),
+):
+    job = create_job(user.id)
+    background_tasks.add_task(run_job, job.job_id, body.question)
+    return JobResponse(job_id=job.job_id, status=job.status)
+
+
+@knowledge_api.get("/jobs/{job_id}", response_model=JobResponse)
+def read_knowledge_job(
+    job_id: UUID,
+    user: UserInDB = Depends(get_current_user),
+):
+    job = get_job(str(job_id), user.id)
+    return JobResponse(
+        job_id=job.job_id, status=job.status, answer=job.answer, detail=job.detail
+    )
 
 @knowledge_api.post(
     "/query",
@@ -51,6 +88,8 @@ def query_knowledge(
     """Ask a question to the Nexova commercial knowledge base."""
     try:
         answer = rag_query(body.question)
+    except KnowledgeNotIndexedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return QueryResponse(answer=answer)

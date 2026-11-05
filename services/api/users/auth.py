@@ -49,6 +49,13 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def verify_jwt_token(token: str) -> dict[str, Any] | None:
+    try:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        return None
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> UserInDB:

@@ -83,3 +83,8 @@ def get_db() -> Generator[Session, None, None]:
             yield session
         finally:
             session.close()
+
+
+def get_session() -> Session:
+    """Create a SQLModel session for callers that manage its lifecycle."""
+    return Session(engine)

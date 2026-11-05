@@ -15,8 +15,6 @@ type PerformanceEntry = {
 
 type PerformanceReport = { week_start: string; entries: PerformanceEntry[] };
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 export default function ReportingPage() {
   const [report, setReport] = useState<PerformanceReport | null>(null);
   const [weekStart, setWeekStart] = useState('');
@@ -29,10 +27,17 @@ export default function ReportingPage() {
       setError('');
       try {
         const query = weekStart ? `?week_start=${weekStart}` : '';
-        const response = await fetch(`${apiUrl}/reporting/weekly-office-program-performance${query}`, {
+        const response = await fetch(`/api/reporting/weekly-office-program-performance${query}`, {
           headers: getAuthHeaders(),
         });
-        if (!response.ok) throw new Error('No se pudo cargar el reporte semanal');
+        if (!response.ok) {
+          const payload: { error?: unknown } = await response.json();
+          throw new Error(
+            typeof payload.error === 'string'
+              ? payload.error
+              : 'No se pudo cargar el reporte semanal',
+          );
+        }
         setReport((await response.json()) as PerformanceReport);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error al cargar el reporte');

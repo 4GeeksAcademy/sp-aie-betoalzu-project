@@ -120,9 +120,12 @@ class TestRetrieve:
     def test_uses_default_score_threshold(self) -> None:
         client = MagicMock()
         client.query_points.return_value = MagicMock(points=[])
-        with patch.object(rag, "embed", return_value=[0.1] * 384):
+        with patch.dict("os.environ", {"RAG_MIN_SCORE": "0.25"}), patch.object(
+            rag, "embed", return_value=[0.1] * 384
+        ):
             rag.retrieve("test", _client=client)  # type: ignore[arg-type]
-        assert client.query_points.call_args.kwargs["score_threshold"] == 0.5
+        assert client.query_points.call_args.kwargs["score_threshold"] == 0.25
+        assert client.query_points.call_args.kwargs["limit"] == 8
 
     def test_explicit_score_threshold_overrides_default(self) -> None:
         client = MagicMock()
