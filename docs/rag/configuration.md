@@ -39,12 +39,20 @@ El embedding se realiza mediante llamada HTTP a un endpoint compatible con la AP
 | `QDRANT_URL` | `http://localhost:6333` | URL para procesos ejecutados desde el host. |
 | `QDRANT_COLLECTION` | `nexova_knowledge` | Colección fija definida por el contrato Nexova. |
 | `QDRANT_DISTANCE` | `Cosine` | Métrica de similitud compatible con el modelo elegido. |
-| `RAG_MIN_SCORE` | `0.5` | Umbral inicial provisional; debe calibrarse en evaluación. |
+| `RAG_MIN_SCORE` | `0.25` | Umbral mínimo de similitud (0 a 1); valor predeterminado calibrado para el corpus y modelo actuales. Se recuperan hasta 8 fragmentos. |
 | `LLM_API_URL` | `https://api.openai.com/v1` | URL base de la API de generación indicada. |
 | `LLM_MODEL` | `gpt-4o-mini` | Modelo generativo elegido; distinto de `EMBED_MODEL`. |
 | `LLM_API_KEY` | (secreto local, no guardar en Git) | Credencial del proveedor de generación. |
 
 Definir en el `.env` local las variables de esta tabla que necesite cada proceso. `.env.example` todavía no refleja la configuración RAG completa; usar los nombres de esta tabla y no guardar credenciales en la plantilla, logs, pruebas ni respuestas.
+
+La recuperación admite preguntas comerciales breves como «Cual es la tarifa de
+Nexova?»: el fragmento de la tarifa puede aparecer en octava posición, con una
+similitud de 0.254. El valor predeterminado 0.25 y el límite de 8 fragmentos
+evitan descartarlo. Un `RAG_MIN_SCORE` explícito prevalece sobre ese valor.
+Recalibrar ambos parámetros si cambia el modelo o el corpus; no son una
+garantía general de relevancia. Si no se recuperan fragmentos, se mantiene
+la abstención sin llamar al modelo generativo.
 
 ## Red y corpus
 

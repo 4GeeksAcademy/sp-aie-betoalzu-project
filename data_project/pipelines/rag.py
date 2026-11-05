@@ -1,7 +1,7 @@
 """RAG pipeline for Nexova commercial knowledge base.
 
 Exports:
-- retrieve(query, *, k=5, min_score=0.5)  → list[dict]
+- retrieve(query, *, k=8, min_score=0.25) → list[dict]
 - generate_answer(question, context)      → str
 - query(question)                         → str
 
@@ -12,6 +12,7 @@ LLM configured in the environment (LLM_API_URL, LLM_MODEL, LLM_API_KEY).
 from __future__ import annotations
 
 import json
+import math
 import os
 from typing import Any
 
@@ -24,7 +25,7 @@ from data_project.process.knowledge_base import COLLECTION_NAME, embed
 
 ROOT_DIR = __import__("pathlib").Path(__file__).resolve().parents[2]
 REQUEST_TIMEOUT = (5, 60)
-_RAG_MIN_SCORE = 0.5  # default; overridable via env
+_RAG_MIN_SCORE = 0.25
 
 
 def _load_llm_config() -> tuple[str, str, str]:
@@ -92,12 +93,23 @@ class InvalidStructuredSupportReply(RuntimeError):
     """Raised when the support model does not honor its response contract."""
 
 
+class KnowledgeNotIndexedError(RuntimeError):
+    """Raised when the commercial knowledge collection has not been created."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "La base de conocimientos comercial no está indexada. "
+            "Un administrador debe ejecutar POST /knowledge/index "
+            "antes de realizar consultas."
+        )
+
+
 # ── Public API ───────────────────────────────────────────────────────────
 
 def retrieve(
     query: str,
     *,
-    k: int = 5,
+    k: int = 8,
     min_score: float | None = None,
     _client: QdrantClient | None = None,
 ) -> list[dict[str, Any]]:
@@ -110,7 +122,16 @@ def retrieve(
     if not query or not query.strip():
         return []
 
-    threshold = _RAG_MIN_SCORE if min_score is None else min_score
+    if min_score is None:
+        load_dotenv(ROOT_DIR / ".env", override=False)
+        try:
+            threshold = float(os.getenv("RAG_MIN_SCORE", str(_RAG_MIN_SCORE)))
+        except ValueError as exc:
+            raise RuntimeError("RAG_MIN_SCORE must be a finite number between 0 and 1.") from exc
+    else:
+        threshold = min_score
+    if not math.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise RuntimeError("RAG_MIN_SCORE must be a finite number between 0 and 1.")
     client = _client or _default_qdrant()
 
     query_vector = embed(query)
@@ -125,10 +146,7 @@ def retrieve(
         )
     except UnexpectedResponse as exc:
         if exc.status_code == 404:
-            raise RuntimeError(
-                "Knowledge collection is missing in Qdrant; "
-                "index the knowledge base before querying (POST /knowledge/index)."
-            ) from exc
+            raise KnowledgeNotIndexedError() from exc
         raise
     hits = response.points
 

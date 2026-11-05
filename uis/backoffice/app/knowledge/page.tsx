@@ -1,58 +1,97 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getAuthHeaders } from '../../lib/auth-token';
 
-type QueryResponse = { answer: string };
+type JobResponse =
+  | { job_id: string; status: 'pending' }
+  | { job_id: string; status: 'completed'; answer: string }
+  | { job_id: string; status: 'failed'; detail: string };
+
+async function requestJob(url: string, init: RequestInit): Promise<JobResponse> {
+  const response = await fetch(url, init);
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Sesión expirada. Inicia sesión nuevamente.');
+  }
+  const body: unknown = await response.json();
+  if (!response.ok) {
+    const message = body && typeof body === 'object'
+      ? ('detail' in body ? body.detail : 'error' in body ? body.error : undefined)
+      : undefined;
+    throw new Error(typeof message === 'string'
+      ? message : 'Error al consultar la base de conocimiento.');
+  }
+  if (!body || typeof body !== 'object'
+    || !('job_id' in body) || typeof body.job_id !== 'string'
+    || !('status' in body)
+    || !['pending', 'completed', 'failed'].includes(String(body.status))) {
+    throw new Error('El servidor devolvió un estado de consulta inválido.');
+  }
+  if (body.status === 'completed' && 'answer' in body && typeof body.answer === 'string') {
+    return { job_id: body.job_id, status: 'completed', answer: body.answer };
+  }
+  if (body.status === 'failed' && 'detail' in body && typeof body.detail === 'string') {
+    return { job_id: body.job_id, status: 'failed', detail: body.detail };
+  }
+  if (body.status !== 'pending') {
+    throw new Error('El servidor devolvió una consulta sin resultado.');
+  }
+  return { job_id: body.job_id, status: 'pending' };
+}
 
 export default function KnowledgePage() {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
-  const [source, setSource] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const activeRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => () => activeRequest.current?.abort(), []);
 
   const handleQuery = async () => {
     const trimmed = question.trim();
-    if (!trimmed || trimmed.length > 2000) return;
+    if (!trimmed || trimmed.length > 2000 || activeRequest.current) return;
 
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setLoading(true);
     setError('');
     setAnswer('');
-    setSource('');
 
     try {
-      const response = await fetch('/api/knowledge/query', {
+      let job = await requestJob('/api/knowledge/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
         body: JSON.stringify({ question: trimmed }),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
       });
-
-      if (response.status === 401 || response.status === 403) {
-        setError('Sesión expirada. Inicia sesión nuevamente.');
-        return;
+      const deadline = Date.now() + 30 * 60 * 1000;
+      while (job.status === 'pending') {
+        await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+        if (controller.signal.aborted) return;
+        if (Date.now() >= deadline) {
+          throw new Error('La consulta está tardando demasiado. Inténtalo de nuevo más tarde.');
+        }
+        job = await requestJob(`/api/knowledge/jobs/${encodeURIComponent(job.job_id)}`, {
+          headers: getAuthHeaders(),
+          cache: 'no-store',
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+        });
       }
-
-      if (response.status === 422) {
-        setError('La pregunta debe tener entre 1 y 2000 caracteres.');
-        return;
+      if (job.status === 'failed') {
+        throw new Error(job.detail);
       }
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        setError(body.detail || body.error || 'Error al consultar la base de conocimiento.');
-        return;
-      }
-
-      const data = (await response.json()) as QueryResponse;
-      setAnswer(data.answer);
+      setAnswer(job.answer);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error de conexión con el servidor.');
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? err.message : 'Error de conexión con el servidor.');
+      }
     } finally {
-      setLoading(false);
+      activeRequest.current = null;
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -95,7 +134,7 @@ export default function KnowledgePage() {
             disabled={loading || !question.trim()}
             className="mt-3 rounded-full bg-brand px-5 py-2 text-sm font-bold text-white transition hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Consultando...' : 'Consultar'}
+            {loading ? 'Consultando en segundo plano...' : 'Consultar'}
           </button>
         </div>
       </section>

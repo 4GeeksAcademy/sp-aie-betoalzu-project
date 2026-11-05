@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Base de conocimientos comercial - recuperacion y consultas asincronas (2026-11-05)
+
+- Coleccion ausente: error tipado y respuesta 503 con instrucciones de indexacion admin; se mantiene el endpoint sincrono.
+- Recuperacion calibrada con el corpus actual: hasta 8 fragmentos, umbral predeterminado 0.25 y configuracion RAG_MIN_SCORE validada. Fuente relevante en 12/12 preguntas comerciales; Recall@3 11/12; tres controles ajenos sin contexto ni generacion.
+- Backoffice usa POST /knowledge/jobs (202) y consulta de estado autenticada; resultados aislados por creador, limites de capacidad y caducidad. Almacen local al proceso: requiere un worker/replica y se pierde al reiniciar.
+- Validacion: nueve pruebas RAG existentes aprobadas, tres excluidas por fixtures previamente defectuosos; lint focalizado y build Next.js con TypeScript aprobados. Comprobaciones aisladas de estados, errores, 401/404/409 y aceptacion HTTP en 0.06 segundos mientras el modelo sigue ocupado.
+- Backend e interfaz activados y rutas verificadas. No se incluyen credenciales, configuracion local, datos ni cambios previos ajenos a esta correccion.
+
 ## Practicas seguras de IA - informe formal (2026-10-30, rama feature/nist-security-practices)
 
 - Informe `docs/informe-auditoria-seguridad-ia.md` en español, con fecha y commit auditado: inventario (4 sistemas del briefing + adicionales), NIST (CSF 2.0 Govern/Identify/Protect/Detect/Respond/Recover con marco NIST AI RMF 1.0/GenAI), OWASP Top 10:2021 x backend/frontend/agente, RGPD (AEPD 72h) / FIPA (30 días) / FCRA (no se da por hecho; sin evidencia de background checks), acciones irreversibles verificadas una por una, pruebas reproducibles con datos sintéticos, estado de servidor/red no verificable y ruta de remediación priorizada con criterios de cierre.
