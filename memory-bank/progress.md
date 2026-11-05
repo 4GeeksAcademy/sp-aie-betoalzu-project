@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Backoffice - rediseño y alternancia de tema (2026-11-05)
+
+- Portada con diez herramientas agrupadas por area y catalogo compartido con el desplegable de la navbar. La accion de registrar candidaturas permanece solo dentro del Pipeline Tracker.
+- Navbar compacta con perfil, cierre de sesion y boton claro/oscuro. Preferencia persistida localmente, tema inicial del sistema, sincronizacion entre pestañas e inicializacion previa al render.
+- Estilos oscuros compartidos para superficies, textos, tablas y formularios, sin cambios de backend, API ni autenticacion.
+- Validacion: ESLint focalizado, TypeScript estricto del area y dependencias transitivas, ocho pruebas existentes de autenticacion y siete comprobaciones de tema aprobadas. Compilacion y activacion verificadas durante la implementacion.
+- Rama de entrega creada desde main para excluir tres commits previos ajenos. Actualizacion de este archivo autorizada explicitamente.
+
 ## Practicas seguras de IA - informe formal (2026-10-30, rama feature/nist-security-practices)
 
 - Informe `docs/informe-auditoria-seguridad-ia.md` en español, con fecha y commit auditado: inventario (4 sistemas del briefing + adicionales), NIST (CSF 2.0 Govern/Identify/Protect/Detect/Respond/Recover con marco NIST AI RMF 1.0/GenAI), OWASP Top 10:2021 x backend/frontend/agente, RGPD (AEPD 72h) / FIPA (30 días) / FCRA (no se da por hecho; sin evidencia de background checks), acciones irreversibles verificadas una por una, pruebas reproducibles con datos sintéticos, estado de servidor/red no verificable y ruta de remediación priorizada con criterios de cierre.
