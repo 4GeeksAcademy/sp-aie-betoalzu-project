@@ -4,13 +4,13 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { ChatWindow } from '@/components/ChatWindow'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 
 /**
  * Página de chat en tiempo real.
  * Usa URL params para obtener sessionId: /chat?sessionId=XXX
  */
-export default function ChatPage() {
+function ChatContent() {
   const router = useRouter()
   const { user } = useAuth()
   const searchParams = useSearchParams()
@@ -80,5 +80,13 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Cargando...</div>}>
+      <ChatContent />
+    </Suspense>
   )
 }

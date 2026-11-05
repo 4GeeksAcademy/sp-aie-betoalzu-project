@@ -9,8 +9,8 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import type { RfpTicketCreatedEvent } from './rfp-sse';
-import { createRfpSseClient } from './rfp-sse';
+import type { RfpTicketCreatedEvent } from '@/services/rfp-sse';
+import { createRfpSseClient } from '@/services/rfp-sse';
 
 export interface UseRfpSseOptions {
   baseUrl: string;

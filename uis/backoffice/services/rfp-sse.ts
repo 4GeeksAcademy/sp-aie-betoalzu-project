@@ -89,7 +89,7 @@ export class RfpSseClient {
         );
       }
 
-      this.reader = this.response.body?.getReader();
+      this.reader = this.response.body?.getReader() ?? null;
       if (!this.reader) {
         throw new Error("Response body is not readable");
       }

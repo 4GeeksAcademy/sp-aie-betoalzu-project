@@ -8,7 +8,7 @@
  * - Session snapshot tras reconexión
  */
 
-import { JWT_TOKEN_KEY } from '@/lib/auth-context'
+import { getStoredToken } from '@/lib/auth-token'
 
 export interface ChatMessage {
   message_id: string
@@ -60,8 +60,7 @@ export class ChatWebSocketClient {
   }
 
   private _getStoredJWT(): string | null {
-    if (typeof localStorage === 'undefined') return null
-    return localStorage.getItem(JWT_TOKEN_KEY)
+    return getStoredToken()
   }
 
   /**
