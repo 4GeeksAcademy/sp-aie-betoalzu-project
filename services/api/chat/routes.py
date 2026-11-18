@@ -156,6 +156,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
     
     # 7. Escuchar eventos del cliente
     current_generation_task: asyncio.Task | None = None  # Para rastrear y abortar si es necesario
+    current_cancel_event: asyncio.Event | None = None  # Señal genuina de cancelación
     current_message_id: str | None = None
     
     try:
@@ -205,8 +206,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                 )
                 
                 current_message_id = assistant_message_id
+                current_cancel_event = asyncio.Event()
                 
-                # Invocar el agente en background
+                # Invocar el agente en background con soporte para cancelación
                 if current_generation_task and not current_generation_task.done():
                     current_generation_task.cancel()
                 
@@ -217,6 +219,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                         message_id=assistant_message_id,
                         user_id=user_id,
                         client_id=client_id,
+                        cancel_event=current_cancel_event,
                     )
                 )
                 
@@ -230,25 +233,21 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                     })
                     continue
                 
-                # Cancelar generación actual
-                if current_generation_task and not current_generation_task.done():
-                    current_generation_task.cancel()
-                    try:
-                        await current_generation_task
-                    except asyncio.CancelledError:
-                        pass
+                # Señalizar cancelación genuina al generador
+                if current_cancel_event:
+                    current_cancel_event.set()
                 
-                # Emitir generación interrumpida
-                if current_message_id:
-                    await pubsub.publish(channel, {
-                        "event": "generation_interrupted",
-                        "data": {
-                            "session_id": session_id,
-                            "message_id": current_message_id,
-                            "status": "interrupted",
-                            "tokens_shown": 0,
-                        }
-                    })
+                # Esperar a que termine gracefully
+                if current_generation_task and not current_generation_task.done():
+                    try:
+                        await asyncio.wait_for(current_generation_task, timeout=2.0)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        # Si no termina en 2s, forzar cancel
+                        current_generation_task.cancel()
+                        try:
+                            await current_generation_task
+                        except asyncio.CancelledError:
+                            pass
                 
                 # Crear nuevo turno con new_input
                 user_message_id = f"msg_{uuid4().hex[:8]}"
@@ -280,8 +279,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                 )
                 
                 current_message_id = assistant_message_id
+                current_cancel_event = asyncio.Event()
                 
-                # Invocar agente con nuevo input
+                # Invocar agente con nuevo input y event de cancelación
                 current_generation_task = asyncio.create_task(
                     invoke_agent_for_chat(
                         question=new_input,
@@ -289,6 +289,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str, token: str = Que
                         message_id=assistant_message_id,
                         user_id=user_id,
                         client_id=client_id,
+                        cancel_event=current_cancel_event,
                     )
                 )
     

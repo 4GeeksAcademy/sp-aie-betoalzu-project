@@ -1,6 +1,6 @@
 """Servicio de integración del agente de soporte con WebSocket streaming.
 
-Maneja la invocación del agente con captura de eventos de token streaming.
+Maneja la invocación del agente con captura de eventos de token streaming real.
 """
 
 import asyncio
@@ -11,6 +11,7 @@ from services.agent.support import SupportAgent, get_support_agent
 from services.pubsub import get_pubsub_broker
 from services.chat_service import MessageService, ChatSessionService
 from services.database import engine
+from data_project.pipelines.rag import generate_answer_stream, retrieve
 
 
 async def stream_agent_response(
@@ -22,11 +23,12 @@ async def stream_agent_response(
     customer_id: Optional[str] = None,
     actor_id: str = "",
     actor_role: str = "",
+    cancel_event: Optional[asyncio.Event] = None,
 ) -> AsyncGenerator[dict, None]:
-    """Ejecutar el agente y transmitir la respuesta terminada por fragmentos.
+    """Ejecutar el agente y transmitir tokens conforme se generan.
     
-    Publicará eventos en el canal pub/sub chat.{session_id}:
-    - token_chunk: cada token generado
+    Publica eventos en el canal pub/sub chat.{session_id}:
+    - token_chunk: cada token generado en tiempo real
     - generation_completed: cuando termina
     - generation_interrupted: si se cancela
     
@@ -39,6 +41,7 @@ async def stream_agent_response(
         customer_id: ID del cliente (opcional)
         actor_id: ID del actor (usuario)
         actor_role: Rol del actor
+        cancel_event: asyncio.Event para señalar cancelación
         
     Yields:
         Eventos de token a medida que se generan
@@ -48,27 +51,26 @@ async def stream_agent_response(
     
     conversation = conversation_id or session_id
     
+    if cancel_event is None:
+        cancel_event = asyncio.Event()
+    
     try:
         # Inicializar el contador de tokens
         token_count = 0
-        # invoke conserva los controles del agente y su checkpoint sincronico.
-        result = await asyncio.to_thread(
-            agent.invoke,
-            question,
-            conversation_id=conversation,
-            customer_id=customer_id,
-            actor_id=actor_id,
-            actor_role=actor_role,
-        )
-        if result.get("error"):
-            raise RuntimeError(result["error"])
-        answer = result.get("answer")
-        if not isinstance(answer, str) or not answer.strip():
-            raise RuntimeError("Support agent returned an empty answer")
-
-        for offset in range(0, len(answer), 80):
-            token = answer[offset:offset + 80]
+        accumulated_text = ""
+        
+        # Recuperar contexto RAG
+        context = await asyncio.to_thread(retrieve, question)
+        
+        # Generar respuesta con streaming real
+        async for token in generate_answer_stream(question, context):
+            # Verificar si se solicita cancelación
+            if cancel_event.is_set():
+                raise asyncio.CancelledError("Cancelado por el usuario")
+            
             token_count += 1
+            accumulated_text += token
+            
             await pubsub.publish(channel, {
                 "event": "token_chunk",
                 "data": {
@@ -89,9 +91,11 @@ async def stream_agent_response(
                 "total_tokens": token_count,
             }
         })
+        
+        yield {"type": "completed", "total_tokens": token_count, "content": accumulated_text}
             
     except asyncio.CancelledError:
-        # Streaming cancelado por el usuario
+        # Streaming cancelado genuinamente
         await pubsub.publish(channel, {
             "event": "generation_interrupted",
             "data": {
@@ -101,7 +105,7 @@ async def stream_agent_response(
                 "tokens_shown": token_count,
             }
         })
-        yield {"type": "interrupted"}
+        yield {"type": "interrupted", "tokens_shown": token_count, "content": accumulated_text}
     except Exception as e:
         # Error durante el streaming
         await pubsub.publish(channel, {
@@ -122,14 +126,15 @@ async def invoke_agent_for_chat(
     client_id: str,
     conversation_id: Optional[str] = None,
     customer_id: Optional[str] = None,
+    cancel_event: Optional[asyncio.Event] = None,
 ) -> None:
-    """Invocar el agente y guardar la respuesta completa.
+    """Invocar el agente y guardar la respuesta.
     
     Esta función:
-    1. Obtiene el agente de soporte
-    2. Invoca el agente con streaming
-    3. Acumula la respuesta
-    4. Guarda el mensaje completo en BD
+    1. Obtiene contexto RAG
+    2. Transmite tokens conforme se generan
+    3. Guarda el mensaje completo en BD
+    4. Respeta cancelaciones genuinas
     
     Args:
         question: Pregunta del usuario
@@ -139,8 +144,10 @@ async def invoke_agent_for_chat(
         client_id: ID del cliente (del JWT)
         conversation_id: ID de conversación (opcional)
         customer_id: ID del cliente en el sistema (opcional)
+        cancel_event: asyncio.Event para señalar cancelación
     """
-    agent = get_support_agent()
+    if cancel_event is None:
+        cancel_event = asyncio.Event()
     
     with Session(engine) as db:
         message_service = MessageService(db)
@@ -151,7 +158,7 @@ async def invoke_agent_for_chat(
             full_response = ""
             
             async for event in stream_agent_response(
-                agent,
+                None,
                 question,
                 session_id,
                 message_id,
@@ -159,11 +166,22 @@ async def invoke_agent_for_chat(
                 customer_id=customer_id,
                 actor_id=user_id,
                 actor_role="customer",
+                cancel_event=cancel_event,
             ):
                 if event.get("type") == "token":
                     full_response += event.get("content", "")
+                elif event.get("type") == "completed":
+                    # Respuesta completada con éxito
+                    await message_service.update_message(
+                        message_id,
+                        text=full_response,
+                        status="completed",
+                    )
+                    # Actualizar timestamp de sesión
+                    await chat_service.update_session_status(session_id, "active")
+                    return
                 elif event.get("type") == "interrupted":
-                    # Marcar como interrumpido
+                    # Guardado genuino de respuesta parcial
                     await message_service.update_message(
                         message_id,
                         text=full_response,
@@ -172,23 +190,13 @@ async def invoke_agent_for_chat(
                     )
                     return
                 elif event.get("type") == "error":
-                    # Guardar error
+                    # Guardar sin contenido en caso de error
                     await message_service.update_message(
                         message_id,
                         text="",
                         status="pending",
                     )
                     return
-            
-            # Guardar respuesta completa
-            await message_service.update_message(
-                message_id,
-                text=full_response,
-                status="completed",
-            )
-            
-            # Actualizar timestamp de sesión
-            await chat_service.update_session_status(session_id, "active")
             
         except Exception as e:
             # Error no capturado
