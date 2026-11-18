@@ -1,5 +1,12 @@
 # Progress — Estado del Proyecto
 
+## Remediacion OWASP - paso 3: cierre documental y pendientes (2026-11-18)
+
+- Actualizado docs/cibersecurity-audit.md con la retirada autorizada del cambio parcial de red, interfaces no-root verificadas y puertos base restringidos. Se mantienen NO APROBADO y los residuales productivos.
+- Procedimiento en docs/server-security-hardening.md: identidad deploy, permisos explicitos, SSH efectivo incluidos bloques Match, firewall IPv4/IPv6 y Docker, capturas reales y comprobacion externa autorizada. No se inventan capturas ni se modifica el host compartido.
+- Se distinguen los cambios backend preparados y sin commit (construccion denegada por contexto protegido), Codespaces solo desarrollo y VPS sin acceso/evidencias. Actualizar memoria y crear commits esta autorizado; ya no es un bloqueo.
+- Validacion documental y git diff --check correctos; revision de seguridad sin secretos ni datos del servidor. Se elimino unicamente la etiqueta de imagen temporal creada para las pruebas de interfaces; no se tocaron contenedores existentes.
+
 ## Remediacion OWASP - paso 2: interfaces no-root (2026-11-18)
 
 - Dockerfile final de interfaces con USER node (UID/GID 1000), directorios de compilacion propiedad de node y /start.sh root-owned 0555.
