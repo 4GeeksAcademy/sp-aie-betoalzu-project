@@ -7,8 +7,10 @@ Implementación completa de streaming de chat en tiempo real con WebSocket bidir
 ### Backend (FastAPI)
 - ✅ Endpoint WebSocket `/ws/chat/{session_id}`
 - ✅ Autenticación con JWT (query param o primer frame)
-- ✅ Streaming de tokens token-por-token
-- ✅ Interrupción genuina del usuario (aborta stream, no pausa grafo)
+- ✅ **Streaming real de tokens** durante la generación del modelo
+- ✅ Interrupción genuina que aborta la inferencia del proveedor
+- ✅ Preservación de texto parcial al interrumpir
+- ✅ Un único evento `generation_interrupted` con token count correcto
 - ✅ Reconexión automática con session snapshot
 - ✅ Pub/Sub broker en memoria para desacoplamiento
 - ✅ Persistencia en SQLModel (PostgreSQL/SQLite)
@@ -16,8 +18,8 @@ Implementación completa de streaming de chat en tiempo real con WebSocket bidir
 ### Frontend (React/TypeScript)
 - ✅ Cliente WebSocket con TypeScript
 - ✅ Hook React `useChatWebSocket` para integración simple
-- ✅ Renderizado progresivo de tokens
-- ✅ Botón de interrupción visible durante generación
+- ✅ Renderizado progresivo de tokens conforme llegan
+- ✅ Botón de interrupción que señaliza al backend
 - ✅ Reconexión automática con backoff exponencial
 - ✅ Componente visual ChatWindow
 
@@ -76,11 +78,16 @@ incluye `client_id`, la sesion queda en el espacio `backoffice:{user.id}` y se
 mantiene la comprobacion de propietario; esto no implementa aislamiento entre
 empresas. La primera conexion autenticada crea la sesion si no existe.
 
-El adaptador WebSocket ejecuta `SupportAgent.invoke` en un hilo para conservar
-los controles de entrada/salida y el checkpoint SQLite sincronico. Publica la
-respuesta terminada en fragmentos, conservando espacios y saltos de linea;
-no transmite tokens durante la inferencia. Interrumpir detiene la entrega,
-pero no cancela una inferencia sincronica que ya este ejecutandose.
+El adaptador WebSocket recupera contexto RAG, abre una conexión HTTP streaming
+con el proveedor generativo (OpenAI-compatible con `stream: true`), y emite
+`token_chunk` conforme cada token llega, sin acumular ni partir después.
+La respuesta parcial se conserva durante toda la interacción.
+
+Cuando el usuario solicita `interrupt_requested`, una bandera asyncio.Event
+señaliza la cancelación genuina al generador, que detiene su iteración sobre
+los eventos SSE del proveedor. El evento `generation_interrupted` se emite
+exactamente una vez con el conteo acumulado de tokens ya mostrados. Si la
+cancelación no termina en 2 segundos, se fuerza la terminación de la tarea.
 
 ## 📡 Protocolo WebSocket
 
