@@ -28,16 +28,17 @@ FROM base AS final
 WORKDIR /app
 
 # Copiar dependencias instaladas
-COPY --from=backoffice-deps /app/backoffice/node_modules ./backoffice/node_modules
-COPY --from=website-deps /app/website/node_modules ./website/node_modules
+COPY --from=backoffice-deps --chown=node:node /app/backoffice/node_modules ./backoffice/node_modules
+COPY --from=website-deps --chown=node:node /app/website/node_modules ./website/node_modules
 
 # Copiar código fuente (incluye dist/styles.css si ya existe)
-COPY backoffice ./backoffice
-COPY website ./website
+COPY --chown=node:node backoffice ./backoffice
+COPY --chown=node:node website ./website
 
 # Copiar script de arranque
 COPY start.sh /start.sh
-RUN chmod +x /start.sh
+RUN chmod 0555 /start.sh
+USER node
 
 EXPOSE 3000 3001
 

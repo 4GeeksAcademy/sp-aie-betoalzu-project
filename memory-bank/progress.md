@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Remediacion OWASP - paso 2: interfaces no-root (2026-11-18)
+
+- Dockerfile final de interfaces con USER node (UID/GID 1000), directorios de compilacion propiedad de node y /start.sh root-owned 0555.
+- Contexto de interfaces excluye node_modules, .next y archivos .env, incluidos los anidados.
+- Validacion: imagen construida; contenedor efimero sin red, puertos ni montajes comprobo UID 1000, escritura en directorios de compilacion, script no escribible, sintaxis sh y Next.js v16.2.6. No se arrancaron las aplicaciones.
+- Seguridad y alcance revisados: solo Dockerfile/ignore de interfaces y este registro en el commit; sin secretos ni cambios del usuario incluidos. El primer smoke check detecto permisos heredados demasiado abiertos del script; se corrigieron a 0555 y la comprobacion final paso.
+- Backend pendiente de commit: construccion bloqueada por permisos sobre el contexto raiz incluso tras limitar .dockerignore a entradas del Dockerfile; no se intenta acceder al uv.lock excluido por politica ni eludir la denegacion.
+
 ## Remediacion OWASP - paso 1: puertos y retirada de red parcial (2026-11-18)
 
 - Compose base: Qdrant sin puertos publicados; backend e interfaces solo en loopback; llamadas internas Next.js a backend por DNS Docker.
