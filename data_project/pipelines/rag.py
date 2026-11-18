@@ -3,6 +3,7 @@
 Exports:
 - retrieve(query, *, k=8, min_score=0.25) → list[dict]
 - generate_answer(question, context)      → str
+- generate_answer_stream(question, context) → AsyncGenerator[str, None]
 - query(question)                         → str
 
 Uses embed() from data_project.process.knowledge_base and the OpenAI-compatible
@@ -14,7 +15,7 @@ from __future__ import annotations
 import json
 import math
 import os
-from typing import Any
+from typing import Any, AsyncGenerator
 
 import requests
 from dotenv import load_dotenv
@@ -221,6 +222,94 @@ def generate_answer(question: str, context: list[dict[str, Any]]) -> str:
         raise RuntimeError("LLM provider returned an invalid response body.") from exc
 
     return answer.strip()
+
+
+async def generate_answer_stream(
+    question: str, context: list[dict[str, Any]]
+) -> AsyncGenerator[str, None]:
+    """Generate a grounded answer with token streaming.
+
+    Yields tokens as they arrive from the LLM provider.
+    When context is empty, yields the abstention message in one chunk.
+    """
+    if not context:
+        yield (
+            "Lo siento, la base de conocimiento no contiene información "
+            "suficiente para responder esa pregunta. Por favor, consulta "
+            "con un account manager senior o con Marcos Ibáñez para "
+            "obtener una respuesta precisa."
+        )
+        return
+
+    context_text = "\n\n".join(
+        f"[{c.get('source_document', '?')} / {c.get('section', '?')}]\n"
+        f"{c.get('text', '')}"
+        for c in context
+    )
+
+    base_url, model, api_key = _load_llm_config()
+
+    try:
+        resp = requests.post(
+            _chat_url(base_url),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": USER_TEMPLATE.format(
+                            context_text=context_text, question=question
+                        ),
+                    },
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1024,
+                "stream": True,
+            },
+            timeout=REQUEST_TIMEOUT,
+            stream=True,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            "LLM provider request failed; check connectivity."
+        ) from exc
+
+    if resp.status_code in (401, 403):
+        raise RuntimeError(
+            f"LLM provider rejected authentication (HTTP {resp.status_code}); "
+            "check LLM_API_KEY and provider access."
+        )
+    if not resp.ok:
+        raise RuntimeError(
+            f"LLM provider request failed (HTTP {resp.status_code}); "
+            "check LLM_API_URL and LLM_MODEL."
+        )
+
+    try:
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            line = line.decode("utf-8") if isinstance(line, bytes) else line
+            if line.startswith("data: "):
+                data_str = line[6:]
+                if data_str == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    token = chunk["choices"][0]["delta"].get("content", "")
+                    if token:
+                        yield token
+                except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+                    pass
+    except Exception as exc:
+        raise RuntimeError(
+            f"LLM provider streaming failed: {str(exc)}"
+        ) from exc
 
 
 def generate_support_reply(
