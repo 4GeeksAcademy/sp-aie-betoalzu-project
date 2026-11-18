@@ -6,6 +6,30 @@ verificaciones de produccion pendientes. No es una certificacion legal.
 No se han consultado datos personales, credenciales ni servicios de terceros
 con informacion del repositorio. Los ejemplos y pruebas usan datos sinteticos.
 
+### Correccion de configuracion de contenedores (2026-11-18)
+
+Interfaces incorpora `USER node` (UID/GID 1000), imagen construida y UID
+verificado en un contenedor efimero sin red ni puertos. El script de arranque
+es root-owned 0555; no se verifico el arranque completo de la aplicacion.
+El cambio backend a `USER nexova` (UID/GID 1000) y comando sin reload esta
+preparado, pero su construccion fue denegada por permisos: **sin commit y
+runtime no verificado**. Compose conserva reload para desarrollo.
+El Compose base deja de publicar Qdrant; backend e interfaces se enlazan
+solo a loopback. Next.js usa el DNS interno del backend. Codespaces mantiene
+el workaround previo del backend en red host y Qdrant solo en loopback:
+**no es una variante endurecida para produccion**.
+
+Esto corrige configuracion versionada, **no acredita el despliegue real**.
+Las observaciones de octubre se conservan como evidencia historica, no como
+descripcion del codigo corregido. El procedimiento y los criterios para
+capturas reales estan en [cierre de servidor/red](server-security-hardening.md).
+SSH root, usuario deploy, permisos y firewall del VPS continuan pendientes.
+El estado global no cambia por ausencia de evidencia productiva.
+
+El cambio parcial de interfaces a red host se retiro con autorizacion humana;
+interfaces vuelve a bridge y accede al backend mediante host-gateway.
+No se ejecutaron los servicios Compose durante esta tarea.
+
 ## Evidencia critica: SEC-01, lectura arbitraria de archivos
 
 Severidad critica, confianza 10/10. Antes de la correccion,
@@ -327,7 +351,7 @@ No se cambio ningun permiso, servicio, configuracion SSH ni regla de red.
 | Permisos | `stat`: server.py 0666; services/ y data_project/ 0777; sshd_config 0644. `.env` no produjo resultado de stat: no se infiere su contenido ni presencia efectiva. | No hay separacion minima demostrada entre codigo y estado. Logs y configuracion productiva: no verificados. |
 | Puertos locales | `ss -ltn`: 0.0.0.0 y :: en 2222 y 2000; resto de listeners observados en loopback. No listeners 6333/6334/5432/6379 observados en esa instantanea. | Un listener no prueba exposicion publica ni reglas de firewall; snapshot local, no servidor final. No atribuir el puerto 2000 a una app sin evidencia. |
 | Firewall | `nft list ruleset`: Operation not permitted; `iptables -S`: Permission denied (must be root). | **No verificado**; no se elevo privilegio ni se modificaron reglas. |
-| Contenedores | Dockerfiles backend/interfaces sin `USER`; Compose publica 8000, 3000/3001, 6333/6334 en host; backend `--reload`. | Configuracion de desarrollo no endurecida para produccion. No se arrancaron contenedores ni se comprobo runtime. |
+| Contenedores (historico 2026-10-28) | Dockerfiles backend/interfaces sin `USER`; Compose publicaba 8000, 3000/3001, 6333/6334 en host; backend `--reload`. | Interfaces no-root verificadas y puertos base restringidos el 2026-11-18; backend pendiente de construccion/commit y despliegue productivo no acreditado. |
 
 Comandos de solo lectura ejecutados (no requieren editar configuracion):
 
@@ -382,7 +406,7 @@ equivalente a una resolucion humana del ticket.
 | SEC-05 Alta, 10/10 | records/_shared.ts conservaba Authorization de un cliente con JWT local hacia proveedor externo. | **Corregido** en proxy: elimina Authorization y Cookie; 3 variantes probadas sin HTTP real. No se verifica si hubo fuga historica. | CTO: rotar/investigar si hubo uso real; mantener prohibicion de PII en Playground. |
 | SEC-06 Media, 10/10 | sse.py difundia IDs/fecha/estado RFP entre usuarios autenticados sin filtro de propietario. | **Corregido**: canales por creador; dos pestanas propias reciben, usuario ajeno no. | Backend: preservar ACL al incorporar nuevos eventos/metadatos. |
 | RES-01 Alta, observada en diseno | Incidencias sin tenant; customer_id del agente elegido por operador; Playground publico. No se comprobo PII real. | **Abierto**, requiere diseno/migracion; contencion funcional aceptada, no eliminacion del riesgo. | CTO/privacidad: tenancy, contratos, prohibir PII real hasta autorizacion. |
-| RES-02 Alta si se despliega tal cual | SSH base permite root; Docker/puertos/permisos de desarrollo no endurecidos; firewall desconocido. | **Abierto / produccion no verificada**. No se altera host compartido sin autorizacion operativa. | Infraestructura: baseline y evidencia efectiva del servidor final. |
+| RES-02 Alta si se despliega tal cual | SSH base local permitia root; firewall del VPS desconocido. Interfaces no-root verificadas y puertos base restringidos; backend no-root preparado sin construccion/commit; variante Codespaces no endurecida. | **Mitigado parcialmente / produccion no verificada**. No se altera host compartido sin autorizacion operativa. | Infraestructura: completar backend y aportar evidencia efectiva del servidor final segun procedimiento de cierre. |
 | RES-03 Media, observada en codigo | Tokens reset impresos si falta proveedor, JWT accesible a JS y warnings con payload. | **Abierto**; no se imprimieron tokens reales en esta auditoria. | Auth/Frontend: eliminar logging sensible; disenar sesiones seguras sin romper CSRF/SSR. |
 | RES-04 Media, observada en codigo | Telemetria publica admite productores no autenticados, metricas falsificables y sin limites de lote especificos. | **Abierto**; no se escribieron eventos en bases reales. | Plataforma: autenticar productores y controlar cuota/esquema/idempotencia. |
 | RES-05 Control no acreditado | Sin escaneo CVE actualizado, alertas/retencion integral, TLS final o evidencias legales suficientes. | **No verificado**, no es prueba de una vulnerabilidad CVE concreta. | CTO/privacidad: SBOM, escaneo CI y evidencia legal/operativa. |

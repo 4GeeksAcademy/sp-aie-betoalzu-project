@@ -1,5 +1,28 @@
 # Progress — Estado del Proyecto
 
+## Remediacion OWASP - paso 3: cierre documental y pendientes (2026-11-18)
+
+- Actualizado docs/cibersecurity-audit.md con la retirada autorizada del cambio parcial de red, interfaces no-root verificadas y puertos base restringidos. Se mantienen NO APROBADO y los residuales productivos.
+- Procedimiento en docs/server-security-hardening.md: identidad deploy, permisos explicitos, SSH efectivo incluidos bloques Match, firewall IPv4/IPv6 y Docker, capturas reales y comprobacion externa autorizada. No se inventan capturas ni se modifica el host compartido.
+- Se distinguen los cambios backend preparados y sin commit (construccion denegada por contexto protegido), Codespaces solo desarrollo y VPS sin acceso/evidencias. Actualizar memoria y crear commits esta autorizado; ya no es un bloqueo.
+- Validacion documental y git diff --check correctos; revision de seguridad sin secretos ni datos del servidor. Se elimino unicamente la etiqueta de imagen temporal creada para las pruebas de interfaces; no se tocaron contenedores existentes.
+
+## Remediacion OWASP - paso 2: interfaces no-root (2026-11-18)
+
+- Dockerfile final de interfaces con USER node (UID/GID 1000), directorios de compilacion propiedad de node y /start.sh root-owned 0555.
+- Contexto de interfaces excluye node_modules, .next y archivos .env, incluidos los anidados.
+- Validacion: imagen construida; contenedor efimero sin red, puertos ni montajes comprobo UID 1000, escritura en directorios de compilacion, script no escribible, sintaxis sh y Next.js v16.2.6. No se arrancaron las aplicaciones.
+- Seguridad y alcance revisados: solo Dockerfile/ignore de interfaces y este registro en el commit; sin secretos ni cambios del usuario incluidos. El primer smoke check detecto permisos heredados demasiado abiertos del script; se corrigieron a 0555 y la comprobacion final paso.
+- Backend pendiente de commit: construccion bloqueada por permisos sobre el contexto raiz incluso tras limitar .dockerignore a entradas del Dockerfile; no se intenta acceder al uv.lock excluido por politica ni eludir la denegacion.
+
+## Remediacion OWASP - paso 1: puertos y retirada de red parcial (2026-11-18)
+
+- Compose base: Qdrant sin puertos publicados; backend e interfaces solo en loopback; llamadas internas Next.js a backend por DNS Docker.
+- Retirado el cambio parcial de interfaces a red host en Codespaces. Se conserva el workaround previo del backend en host y el acceso de interfaces por host-gateway; Qdrant solo publica 127.0.0.1:6333.
+- La variante Codespaces sigue siendo de desarrollo: el backend en host no queda endurecido ni aprobado para un VPS publico.
+- Validacion: modelos Compose base/variante analizados sin cargar secretos; aserciones de puertos, redes y destinos aprobadas; git diff --check correcto. Dos errores del comprobador auxiliar sobre la representacion JSON se corrigieron sin modificar la configuracion por ellos.
+- Alcance y seguridad revisados: solo Compose y este registro en el commit; sin secretos ni cambios de SSH/firewall/servicios del host. Actualizacion de memoria y retirada del cambio parcial autorizadas expresamente. AGENTS.md contiene cambios del usuario y se excluye.
+
 ## Chat de soporte - conexion y generacion de respuestas (2026-11-05)
 
 - WebSocket del navegador en el mismo dominio, reenviado por Next.js al backend; validacion del usuario activo con el JWT de login y espacio por usuario cuando no hay client_id. Las sesiones nuevas se crean al conectar y conservan la comprobacion de propietario.
