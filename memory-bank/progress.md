@@ -1,5 +1,13 @@
 # Progress — Estado del Proyecto
 
+## Remediacion OWASP - paso 1: puertos y retirada de red parcial (2026-11-18)
+
+- Compose base: Qdrant sin puertos publicados; backend e interfaces solo en loopback; llamadas internas Next.js a backend por DNS Docker.
+- Retirado el cambio parcial de interfaces a red host en Codespaces. Se conserva el workaround previo del backend en host y el acceso de interfaces por host-gateway; Qdrant solo publica 127.0.0.1:6333.
+- La variante Codespaces sigue siendo de desarrollo: el backend en host no queda endurecido ni aprobado para un VPS publico.
+- Validacion: modelos Compose base/variante analizados sin cargar secretos; aserciones de puertos, redes y destinos aprobadas; git diff --check correcto. Dos errores del comprobador auxiliar sobre la representacion JSON se corrigieron sin modificar la configuracion por ellos.
+- Alcance y seguridad revisados: solo Compose y este registro en el commit; sin secretos ni cambios de SSH/firewall/servicios del host. Actualizacion de memoria y retirada del cambio parcial autorizadas expresamente. AGENTS.md contiene cambios del usuario y se excluye.
+
 ## Chat de soporte - conexion y generacion de respuestas (2026-11-05)
 
 - WebSocket del navegador en el mismo dominio, reenviado por Next.js al backend; validacion del usuario activo con el JWT de login y espacio por usuario cuando no hay client_id. Las sesiones nuevas se crean al conectar y conservan la comprobacion de propietario.

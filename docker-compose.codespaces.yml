@@ -6,3 +6,12 @@ services:
     environment:
       QDRANT_URL: http://127.0.0.1:6333
       LLM_MODEL: madrid-spain/openrouter/deepseek/deepseek-v4-flash
+  qdrant:
+    ports:
+      - "127.0.0.1:6333:6333"
+  interfaces:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      API_URL: http://host.docker.internal:8000
+      BACKEND_URL: http://host.docker.internal:8000
